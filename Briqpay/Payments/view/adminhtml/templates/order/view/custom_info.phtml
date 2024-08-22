@@ -1,0 +1,35 @@
+<?php /** @var \Briqpay\Payments\Block\Order\View\Custom $block */ ?>
+<?php if ($block->hasBriqpayData()): ?>
+    <div class="transaction-info-container">
+        <span class="title">Transaction Information</span>
+
+        <?php if ($block->hasPspDisplayName()): ?>
+            <div>
+                <strong>PSP Name:</strong> <?php echo $block->getPspDisplayName(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->hasBriqpaySessionId()): ?>
+            <div>
+                <strong>Briqpay Session ID:</strong> 
+                <a href="<?php echo $block->getBriqpayBackofficeUrl(); ?>" target="_blank">
+                    <?php echo $block->getBriqpaySessionId(); ?>
+                </a>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->hasBriqpayPspReservationId()): ?>
+            <div>
+                <strong>Briqpay PSP Reservation ID:</strong>
+                <?php echo $block->getBriqpayPspReservationId(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->hasBriqpaySessionStatus()): ?>
+            <div>
+                <strong>Briqpay Transaction Status:</strong>
+                <?php echo $block->getBriqpaySessionStatus(); ?>
+            </div>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>

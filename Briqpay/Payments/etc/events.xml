@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+     <event name="sales_order_invoice_save_after">
+        <observer name="briqpay_capture_invoice" instance="Briqpay\Payments\Observer\CaptureInvoice" />
+    </event> 
+    <event name="order_cancel_after">
+        <observer name="briqpay_cancel_order" instance="Briqpay\Payments\Observer\CancelOrder" />
+    </event>
+  <!--   <event name="briqpay_payment_module_body_prepare">
+        <observer name="create_session_observer" instance="Briqpay\Payments\Observer\Examples\CreateSessionObserverExample" />
+    </event> -->
+  <!--  <event name="briqpay_payment_module_update_prepare">
+        <observer name="update_session_observer" instance="Briqpay\Payments\Observer\Examples\UpdateSessionObserverExample" />
+    </event>     -->
+    <!--  <event name="briqpay_payment_module_decision_prepare">
+        <observer name="decision_observer" instance="Briqpay\Payments\Observer\Examples\DecisionObserverExample" />
+    </event>  -->
+        <event name="email_order_set_template_vars_before">
+    <observer name="custom_payment_method_name" instance="Briqpay\Payments\Observer\CustomPaymentMethodName" />
+    </event>
+</config>

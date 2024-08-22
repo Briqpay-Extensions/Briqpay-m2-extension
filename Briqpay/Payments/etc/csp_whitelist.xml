@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/csp_whitelist.xsd">
+    <policies>
+        <policy id="script-src">
+            <values>
+                <value id="briqpay-client-playground" type="host">msc-playground.briqpay.com</value>
+                <value id="briqpay-domain-playground" type="host">playground-api.briqpay.com</value>
+                <value id="briqpay-client" type="host">msc.briqpay.com</value>
+                <value id="briqpay-domain" type="host">api.briqpay.com</value>
+                <!-- Add other script sources as needed -->
+            </values>
+        </policy>
+        <policy id="frame-src">
+            <values>
+                <value id="briqpay-domain-playground" type="host">msc-playground.briqpay.com</value>
+                <value id="briqpay-domain" type="host">msc.briqpay.com</value>
+                <!-- Add other frame sources as needed -->
+            </values>
+        </policy>
+        <!-- Add more policies as needed -->
+    </policies>
+</csp_whitelist>

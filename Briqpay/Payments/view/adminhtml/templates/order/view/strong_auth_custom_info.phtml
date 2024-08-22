@@ -1,0 +1,46 @@
+<?php /** @var \Briqpay\Payments\Block\Order\View\StrongAuthCustomData $block */ ?>
+<?php if ($block->hasStrongAuthData()): ?>
+    <div class="strong-auth-info-container">
+        <span class="title">Strong Authentication Information</span>
+
+        <?php if ($block->getStrongAuthProvider()): ?>
+            <div>
+                <strong>Provider:</strong> <?php echo $block->getStrongAuthProvider(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->getSignedAt()): ?>
+            <div>
+                <strong>Signed At:</strong> <?php echo $block->getSignedAt(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->getName()): ?>
+            <div>
+                <strong>Name:</strong> <?php echo $block->getName(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->getSurname()): ?>
+            <div>
+                <strong>Surname:</strong> <?php echo $block->getSurname(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->getGivenName()): ?>
+            <div>
+                <strong>Given Name:</strong> <?php echo $block->getGivenName(); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($block->getDateOfBirth()): ?>
+            <div>
+                <strong>Date of Birth:</strong> <?php echo $block->getDateOfBirth(); ?>
+            </div>
+        <?php endif; ?>
+
+        <div>
+            <strong>Company Signatory:</strong> <?php echo $block->isCompanySignatory() ? 'Yes' : 'No'; ?>
+        </div>
+    </div>
+<?php endif; ?>

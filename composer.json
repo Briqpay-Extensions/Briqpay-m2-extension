@@ -1,0 +1,34 @@
+{
+  "name": "briqpay/module-payments",
+  "description": "Briqpay Payments module for Magento 2, providing seamless integration with Briqpay payment gateway.",
+  "require": {
+    "php": ">=7.1",
+    "magento/framework": "^103.0"
+  },
+  "type": "magento2-module",
+  "version": "1.0.4",
+  "license": "OSL-3.0 OR AFL-3.0",
+  "autoload": {
+    "psr-4": {
+      "Briqpay\\Payments\\": "Briqpay/Payments/"
+    },
+    "files": [
+      "Briqpay/Payments/registration.php"
+    ]
+  },
+  "authors": [
+    {
+      "name": "Briqpay",
+      "email": "support@briqpay.com",
+      "homepage": "https://briqpay.com",
+      "role": "Author"
+    }
+  ],
+  "keywords": ["magento", "magento2", "payment", "briqpay", "ecommerce"],
+  "support": {
+    "email": "support@briqpay.com",
+    "docs": "https://cdn.briqpay.com/magento_documention"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

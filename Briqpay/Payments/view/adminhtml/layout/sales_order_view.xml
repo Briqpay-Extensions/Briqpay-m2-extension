@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <css src="Briqpay_Payments::css/custom.css"/>
+    </head>
+    <body>
+        <referenceContainer name="order_additional_info">
+            <container name="order_info_containers" htmlTag="div" htmlClass="order-info-containers" after="order_tab_info">
+                <block class="Briqpay\Payments\Block\Order\View\Custom" name="order_view_custom" template="Briqpay_Payments::order/view/custom_info.phtml"/>
+                <block class="Briqpay\Payments\Block\Order\View\BusinessCustomData" name="order_view_business_custom" template="Briqpay_Payments::order/view/business_custom_info.phtml"/>
+                <block class="Briqpay\Payments\Block\Order\View\StrongAuthCustomData" name="order_view_strongauth_custom" template="Briqpay_Payments::order/view/strong_auth_custom_info.phtml"/>
+            </container>
+        </referenceContainer>
+    </body>
+</page>
