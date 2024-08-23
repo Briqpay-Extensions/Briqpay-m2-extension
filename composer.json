@@ -27,7 +27,7 @@
   "keywords": ["magento", "magento2", "payment", "briqpay", "ecommerce"],
   "support": {
     "email": "support@briqpay.com",
-    "docs": "https://cdn.briqpay.com/magento_documention"
+    "docs": "https://cdn.briqpay.com/static/plugins/Magento/Briqpay-M2-Extension-developer-guide.pdf"
   },
   "minimum-stability": "stable",
   "prefer-stable": true

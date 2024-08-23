@@ -1,6 +1,6 @@
 # Briqpay Payments Module for Magento 2
 
-![Briqpay Logo](https://cdn.briqpay.com/briqpay.com/Briqpay_Payments_Unleashed_91c02b1b26/Briqpay_Payments_Unleashed_91c02b1b26.svg) <!-- Replace with actual logo URL if available -->
+![Briqpay Logo](https://cdn.briqpay.com/static/images/briqpayLogo.svg) <!-- Replace with actual logo URL if available -->
 
 ## Overview
 

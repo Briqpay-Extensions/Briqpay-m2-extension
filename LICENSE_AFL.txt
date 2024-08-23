@@ -1,0 +1,9 @@
+Academic Free License (AFL 3.0)
+
+This software is provided under the terms of the Academic Free License (AFL 3.0). The full license is available at:
+
+https://opensource.org/licenses/AFL-3.0
+
+A copy of the license text is provided below:
+
+[Include the full text of the AFL 3.0 license here]
