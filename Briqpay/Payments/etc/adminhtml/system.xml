@@ -40,9 +40,14 @@
                     <label>Payment Method Title</label>
                     <comment>Title for the payment method displayed during checkout.</comment>
                 </field>
+
+                <field id="custom_decision" translate="label" type="select" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Custom decision logic</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field> 
                 
                 <!-- New field for Log Level -->
-                <field id="log_level" translate="label" type="select" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
+                <field id="log_level" translate="label" type="select" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Log Level</label>
                     <source_model>Briqpay\Payments\Model\Config\Source\LogLevel</source_model>
                     <comment>Select the level of logging.</comment>

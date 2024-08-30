@@ -56,13 +56,40 @@ require([
     // Function to execute custom Briqpay logic
     function executeBriqpayLogic() {
       window._briqpay.v3.onReady(function () {
-        // console.log("Briqpay is initialized, executing custom JavaScript...")
-
         try {
           window._briqpay.v3.unlockModule("payment")
 
-          _briqpay.subscribe("make_decision", function (data) {
-            // console.log("Decision data:", data)
+          const promiseForResponse = new Promise((resolve) => {
+            document.addEventListener(
+              "briqpayDecisionResponse",
+              function (e) {
+                resolve(e.detail) // Resolve with the event detail
+              },
+              { once: true }
+            )
+          })
+
+          _briqpay.subscribe("make_decision", async function (data) {
+            if (window.checkoutConfig.payment?.briqpay?.customDecisionLogic) {
+              const event = new CustomEvent("briqpayDecision", {
+                detail: { data: data },
+              })
+              document.dispatchEvent(event)
+
+              const customDecisionResponse = await Promise.race([
+                promiseForResponse,
+                new Promise((resolve) =>
+                  setTimeout(() => {
+                    resolve({ decision: true })
+                  }, 10000)
+                ), 
+              ])
+
+              if (!customDecisionResponse.decision) {
+                window._briqpay.v3.resumeDecision()
+                return // Exit early
+              }
+            }
 
             if (!isBriqpaySelected()) {
               window._briqpay.v3.resumeDecision() // Resume decision process
@@ -71,7 +98,6 @@ require([
 
             // Execute validation outside the event listener
             if (!validateBriqpayTermsAndConditions()) {
-              // console.log("Terms and conditions validation failed for Briqpay.")
               window._briqpay.v3.resumeDecision() // Resume decision process
               return // Exit early if T&C validation fails
             }
@@ -113,7 +139,6 @@ require([
         if (isBriqpaySelected()) {
           if (window._briqpay && window._briqpay.v3) {
             window._briqpay.v3.lockModule("payment", true)
-            // console.log("Briqpay module locked due to billing address display.")
           }
         }
       } else {
@@ -121,7 +146,6 @@ require([
         if (isBriqpaySelected()) {
           if (window._briqpay && window._briqpay.v3) {
             window._briqpay.v3.unlockModule("payment")
-            // console.log("Briqpay module unlocked as billing address is hidden.")
           }
         }
       }
@@ -135,7 +159,6 @@ require([
         if (isBriqpaySelected()) {
           if (window._briqpay && window._briqpay.v3) {
             window._briqpay.v3.unlockModule("payment")
-            // console.log("Briqpay module unlocked on billing address update.")
           }
         }
       }
@@ -146,7 +169,6 @@ require([
       if (isBriqpaySelected()) {
         if (window._briqpay && window._briqpay.v3) {
           window._briqpay.v3.unlockModule("payment")
-          // console.log("Briqpay module unlocked on address update button click.")
         }
       }
     })
