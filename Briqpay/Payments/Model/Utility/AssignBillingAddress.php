@@ -101,11 +101,14 @@ class AssignBillingAddress
                 'phoneNumber' => $billingAddress->getTelephone(),
             ];
 
+            // Replace null values with empty strings
             foreach ($billingData as $key => $value) {
-                if (empty($value)) {
-                    if ($key != "streetAddress2") {
-                        $this->logger->error('Empty value found for billing data field: ' . $key);
-                    }
+                if (is_null($value)) {
+                    $billingData[$key] = '';
+                }
+
+                if (empty($value) && $key != "streetAddress2") {
+                    $this->logger->error('Empty value found for billing data field: ' . $key);
                 }
             }
 

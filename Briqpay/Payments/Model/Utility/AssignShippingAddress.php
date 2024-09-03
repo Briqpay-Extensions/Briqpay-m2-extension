@@ -101,8 +101,13 @@ class AssignShippingAddress
                 'phoneNumber' => $shippingAddress->getTelephone(),
             ];
 
+            // Replace null values with empty strings
             foreach ($shippingData as $key => $value) {
-                if (empty($value)) {
+                if (is_null($value)) {
+                    $shippingData[$key] = '';
+                }
+
+                if (empty($value) && $key != "streetAddress2") {
                     $this->logger->error('Empty value found for shipping data field: ' . $key);
                 }
             }
