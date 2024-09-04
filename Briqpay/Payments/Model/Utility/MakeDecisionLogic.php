@@ -9,8 +9,9 @@ use Briqpay\Payments\Model\Utility\CompareData;
 use Briqpay\Payments\Model\PaymentModule\ReadSession;
 use Briqpay\Payments\Model\PaymentModule\MakeDecision;
 use Magento\Framework\Event\ManagerInterface as EventManager;
-use Magento\Quote\Model\QuoteRepository; // Correct interface
+use Magento\Quote\Model\QuoteRepository;
 use Magento\Checkout\Model\Session as CheckoutSession;
+use Magento\Payment\Model\Checks\Composite as PaymentCompositeChecks;
 use Briqpay\Payments\Logger\Logger;
 
 class MakeDecisionLogic
@@ -25,6 +26,7 @@ class MakeDecisionLogic
     protected $eventManager;
     protected $quoteRepository;
     protected $checkoutSession;
+    protected $paymentCompositeChecks;
 
     public function __construct(
         AssignBillingAddress $billingData,
@@ -35,8 +37,9 @@ class MakeDecisionLogic
         CompareData $compareData,
         Logger $logger,
         EventManager $eventManager,
-        QuoteRepository $quoteRepository, // Correct interface
-        CheckoutSession $checkoutSession
+        QuoteRepository $quoteRepository,
+        CheckoutSession $checkoutSession,
+        PaymentCompositeChecks $paymentCompositeChecks
     ) {
         $this->billingData = $billingData;
         $this->shippingData = $shippingData;
@@ -48,55 +51,80 @@ class MakeDecisionLogic
         $this->eventManager = $eventManager;
         $this->quoteRepository = $quoteRepository;
         $this->checkoutSession = $checkoutSession;
+        $this->paymentCompositeChecks = $paymentCompositeChecks;
     }
 
     public function makeDecision(string $sessionId, $fallbackEmail = null): bool
     {
+        $decision = true; // Start with the assumption that the decision will be true
+        $validationErrors = []; // Array to hold validation error messages
+    
         try {
             // Fetch current session data
             $session = $this->readSession->getSession($sessionId);
             $sessionData = $session['data'] ?? [];
-
+    
             // Fetch the quote object using the quote ID from checkout session
             $quoteId = $this->checkoutSession->getQuoteId();
             $quote = $this->quoteRepository->get($quoteId);
 
+            // Apply Magento's core payment method checks
+            $paymentMethod = $quote->getPayment()->getMethodInstance();
+            $checksResult = $this->paymentCompositeChecks->isApplicable($paymentMethod, $quote);
+
+            if (!$checksResult) {
+                $this->logger->error('Payment method validation failed for session ' . $sessionId);
+                return false; // If validation fails, return false immediately
+            }
+    
             // Fetch current billing, shipping, and cart data
             $billingData = $this->billingData->getBillingData($fallbackEmail);
             $shippingData = $this->shippingData->getShippingData($fallbackEmail);
             $cart = $this->cart->getCart();
-
+    
             // Compare with existing session data
             $billingDataChanged = $this->compareData->compareData($sessionData['billing'] ?? [], $billingData);
             $shippingDataChanged = $this->compareData->compareData($sessionData['shipping'] ?? [], $shippingData);
             $cartTotalCompare = !$this->compareData->doesTotalsMatch($sessionData['order']['amountIncVat'] ?? [], (int) round($quote->getGrandTotal() * 100, 0));
-
-            $this->logger->debug('Starting validation compare  for session '.$session["sessionId"]);
-            $this->logger->debug('comparing adresses and totals from session: '.$sessionData['order']['amountIncVat']." and quote ". (int) round($quote->getGrandTotal() * 100, 0));
-            $this->logger->debug('billingDataChanged', ['billingDataChanged' => $billingDataChanged]);
-            $this->logger->debug('shippingDataChanged', ['shippingDataChanged' => $shippingDataChanged]);
-            $this->logger->debug('doesTotalsMatch', ['doesTotalsMatch' => $cartTotalCompare]);
-
-            $validation = true;
+    
+            // Log the results of the comparisons
+            if ($billingDataChanged) {
+                $validationErrors[] = 'Billing data has changed.';
+            }
+    
+            if ($shippingDataChanged) {
+                $validationErrors[] = 'Shipping data has changed.';
+            }
+    
+            if ($cartTotalCompare) {
+                $validationErrors[] = 'Cart totals do not match.';
+            }
+    
+            // Fire event to allow other modules to affect the decision
             $this->eventManager->dispatch('briqpay_payment_module_decision_prepare', [
                 'session' => $session,
-                'validation' => &$validation,
+                'validation' => &$decision,
                 'quote' => $quote
             ]);
-
-
-            // Perform decision making
-            $decision = !$billingDataChanged && !$shippingDataChanged && !$cartTotalCompare && $validation;
-
+    
+            // Final validation check
+            if (!empty($validationErrors)) {
+                // Log all validation errors
+                foreach ($validationErrors as $error) {
+                    $this->logger->error('Validation error for session ' . $sessionId . ': ' . $error);
+                }
+                $decision = false; // If any validation errors exist, set decision to false
+            }
+    
             $this->logger->debug('Final Decision', ['Final' => $decision]);
             $this->makeDecision->makeDecision($sessionId, $decision);
-
+    
             return $decision;
         } catch (\Exception $e) {
             $this->logger->error('Error making decision for session ' . $sessionId . ': ' . $e->getMessage(), [
                 'exception' => $e,
             ]);
-            throw new \Exception('Error making decision for session ' . $sessionId);
+            return false; // If an exception occurs, decision should be false
         }
     }
 }
