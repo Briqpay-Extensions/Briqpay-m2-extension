@@ -58,19 +58,18 @@ require([
       window._briqpay.v3.onReady(function () {
         try {
           window._briqpay.v3.unlockModule("payment")
-
-          const promiseForResponse = new Promise((resolve) => {
-            document.addEventListener(
-              "briqpayDecisionResponse",
-              function (e) {
-                resolve(e.detail) // Resolve with the event detail
-              },
-              { once: true }
-            )
-          })
-
           _briqpay.subscribe("make_decision", async function (data) {
             if (window.checkoutConfig.payment?.briqpay?.customDecisionLogic) {
+              const promiseForResponse = new Promise((resolve) => {
+                document.addEventListener(
+                  "briqpayDecisionResponse",
+                  function (e) {
+                    resolve(e.detail) // Resolve with the event detail
+                  },
+                  { once: true }
+                )
+              })
+
               const event = new CustomEvent("briqpayDecision", {
                 detail: { data: data },
               })
