@@ -45,7 +45,7 @@ class Success extends Action
             $this->sessionManager->unsetData('briqpay_session_id');
             $this->logger->critical($e->getMessage());
             $this->messageManager->addErrorMessage(__('Something went wrong while creating the order.'));
-            return $this->_redirect('checkout/cart');
+            return $this->_redirect('checkout/onepage/failure');
         }
     }
 }

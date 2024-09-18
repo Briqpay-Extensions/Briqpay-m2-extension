@@ -47,7 +47,7 @@ class MakeDecision
      * @return array|null
      * @throws \Exception
      */
-    public function makeDecision(string $sessionId, bool $decision): ?array
+    public function makeDecision(string $sessionId, bool $decision, bool $softError): ?array
     {
         $config = $this->setupConfig->getSetupConfig();
         $uri = '/v3/session/' . $sessionId . '/decision';
@@ -57,7 +57,15 @@ class MakeDecision
 
         // Append 'rejectionType' only if $decision is false
         if (!$decision) {
-            $body['rejectionType'] = 'notify_user';
+            if ($softError) {
+                $body['rejectionType'] = 'notify_user';
+                $body['softErrors'] = []; 
+                $body['softErrors'][] = [
+                    'message' => __('Something went wrong, try reloading the page. If you are still having problems please contact support.')
+                ];
+            } else {
+                $body['rejectionType'] = 'notify_user';
+            }
         }
 
         try {

@@ -58,6 +58,7 @@ class MakeDecisionLogic
     {
         $decision = true; // Start with the assumption that the decision will be true
         $validationErrors = []; // Array to hold validation error messages
+        $softError = false; // Initialize softError to false
     
         try {
             // Fetch current session data
@@ -67,11 +68,27 @@ class MakeDecisionLogic
             // Fetch the quote object using the quote ID from checkout session
             $quoteId = $this->checkoutSession->getQuoteId();
             $quote = $this->quoteRepository->get($quoteId);
-
+    
+            // Validate required quote fields before proceeding
+            if (!$quote->getCustomerEmail()) {
+                $validationErrors[] = 'Customer email is missing.';
+                $softError = true; // Set softError to true if an error is found
+            }
+    
+            if (!$quote->getBillingAddress()) {
+                $validationErrors[] = 'Billing address is missing.';
+                $softError = true; // Set softError to true if an error is found
+            }
+    
+            if (!$quote->getShippingAddress()) {
+                $validationErrors[] = 'Shipping address is missing.';
+                $softError = true; // Set softError to true if an error is found
+            }
+    
             // Apply Magento's core payment method checks
             $paymentMethod = $quote->getPayment()->getMethodInstance();
             $checksResult = $this->paymentCompositeChecks->isApplicable($paymentMethod, $quote);
-
+    
             if (!$checksResult) {
                 $this->logger->error('Payment method validation failed for session ' . $sessionId);
                 return false; // If validation fails, return false immediately
@@ -115,9 +132,9 @@ class MakeDecisionLogic
                 }
                 $decision = false; // If any validation errors exist, set decision to false
             }
-    
+
             $this->logger->debug('Final Decision', ['Final' => $decision]);
-            $this->makeDecision->makeDecision($sessionId, $decision);
+            $this->makeDecision->makeDecision($sessionId, $decision, $softError); // Pass softError as the third param
     
             return $decision;
         } catch (\Exception $e) {
