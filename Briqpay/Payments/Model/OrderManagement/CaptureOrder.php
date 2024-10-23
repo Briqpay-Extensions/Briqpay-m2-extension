@@ -333,7 +333,7 @@ class CaptureOrder
         if ($shippingAmount <= 0) {
             $this->logger->warning('Shipping item not found in the order.', [
             'orderId' => $order->getId(),
-            'orderId' => $order->getOrder()->getIncrementId()
+            'orderId' => $order->getIncrementId()
             ]);
             return null;
         }

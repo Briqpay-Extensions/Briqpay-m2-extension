@@ -17,6 +17,7 @@
                 <can_refund>true</can_refund>
                 <order_status>pending_payment</order_status> <!-- Set your default order status -->
                 <checkout_title>Payment Methods</checkout_title>
+                <strict_rounding>0</strict_rounding>
             </briqpay>
         </payment>
     </default>

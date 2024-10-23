@@ -31,7 +31,7 @@ class Logger extends MonologLogger
     protected function getLogLevel()
     {
         $logLevel = $this->scopeConfig->getValue(
-            'payment/briqpay/log_level',
+            'payment/briqpay/advanced/log_level',
             ScopeInterface::SCOPE_STORE
         );
         return $logLevel ? (int)$logLevel : MonologLogger::DEBUG; // Default to DEBUG if not set

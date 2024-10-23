@@ -41,17 +41,29 @@
                     <comment>Title for the payment method displayed during checkout.</comment>
                 </field>
 
-                <field id="custom_decision" translate="label" type="select" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
-                    <label>Custom decision logic</label>
-                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                </field> 
-                
-                <!-- New field for Log Level -->
-                <field id="log_level" translate="label" type="select" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
-                    <label>Log Level</label>
-                    <source_model>Briqpay\Payments\Model\Config\Source\LogLevel</source_model>
-                    <comment>Select the level of logging.</comment>
-                </field>
+                <!-- New Advanced Section -->
+                <group id="advanced" translate="label" type="fieldset" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Briqpay Advanced Features</label>
+                    <comment>This section contains advanced settings for the Briqpay payment module.</comment>
+                    
+                    <field id="log_level" translate="label" type="select" sortOrder="110" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Log Level</label>
+                        <source_model>Briqpay\Payments\Model\Config\Source\LogLevel</source_model>
+                        <comment>Select the level of logging.</comment>
+                    </field>
+
+                    <field id="custom_decision" translate="label" type="select" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Custom decision logic</label>
+                        <comment>Enabling custom decision triggers an event during the Briqpay decision process, allowing you to perform custom validation and intercept the decision before completion. The custom decision has a 10-second timeout.</comment>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    </field> 
+                    
+                    <field id="strict_rounding" translate="label comment" sortOrder="120" type="select" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Strict rounding</label>
+                        <comment>Apply strict rounding by adding a rounding adjustment line to ensure that the total of line items matches the total amount exactly.</comment>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    </field>
+                </group>
             </group>
         </section>
     </system>

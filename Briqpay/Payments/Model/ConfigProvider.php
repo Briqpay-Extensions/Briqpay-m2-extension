@@ -8,7 +8,7 @@ use Magento\Framework\App\Config\ScopeConfigInterface;
 class ConfigProvider implements ConfigProviderInterface
 {
     const XML_PATH_BRIQPAY_TITLE = 'payment/briqpay/checkout_title';
-    const XML_PATH_BRIQPAY_DECISION = 'payment/briqpay/custom_decision';
+    const XML_PATH_BRIQPAY_DECISION = 'payment/briqpay/advanced/custom_decision';
     const XML_PATH_ENABLE_TERMS_AND_CONDITIONS = 'checkout/options/enable_agreements';
     
     protected $scopeConfig;
