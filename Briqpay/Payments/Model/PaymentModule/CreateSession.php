@@ -7,9 +7,12 @@ use Briqpay\Payments\Model\Utility\AssignBillingAddress;
 use Briqpay\Payments\Model\Utility\AssignShippingAddress;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
+use Briqpay\Payments\Model\Utility\RoundingHelper;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Framework\Event\ManagerInterface;
+use Magento\Store\Model\ScopeInterface;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\UrlInterface; // Import UrlInterface
 
 class CreateSession
@@ -18,12 +21,14 @@ class CreateSession
     protected $cart;
     protected $billingData;
     protected $shippingData;
+    protected $rounding;
     protected $apiClient;
     protected $logger;
     protected $checkoutSession;
     protected $quoteRepository;
     protected $eventManager;
     protected $urlBuilder; // Add UrlBuilder property
+    private $scopeConfig;
 
     public function __construct(
         SetupConfig $setupConfig,
@@ -31,10 +36,12 @@ class CreateSession
         GenerateCart $cart,
         AssignBillingAddress $billingData,
         AssignShippingAddress $shippingData,
+        RoundingHelper $rounding,
         Logger $logger,
         CheckoutSession $checkoutSession,
         CartRepositoryInterface $quoteRepository,
         ManagerInterface $eventManager,
+        ScopeConfigInterface $scopeConfig,
         UrlInterface $urlBuilder // Add UrlBuilder to constructor
     ) {
         $this->setupConfig = $setupConfig;
@@ -42,10 +49,12 @@ class CreateSession
         $this->cart = $cart;
         $this->billingData = $billingData;
         $this->shippingData = $shippingData;
+        $this->rounding = $rounding;
         $this->logger = $logger;
         $this->checkoutSession = $checkoutSession;
         $this->quoteRepository = $quoteRepository;
         $this->eventManager = $eventManager;
+        $this->scopeConfig = $scopeConfig;
         $this->urlBuilder = $urlBuilder; // Initialize UrlBuilder
     }
 
@@ -143,6 +152,9 @@ class CreateSession
         // Log the body after dispatching the event
         $this->logger->debug('Body after dispatch:', $body);
 
+        if ($this->scopeConfig->getValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
+            $body = $this->rounding->roundCart($body);
+        }
         // Log the body before making the request
         $this->logger->debug('Final body before request to ApiClient:', $body);
 

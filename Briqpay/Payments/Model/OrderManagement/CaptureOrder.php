@@ -219,11 +219,15 @@ class CaptureOrder
             
                 // Calculate the tax rate
                 $taxRate = $item->getTaxPercent()* 100;
-               
+                $productType = 'physical'; // Default to physical
+                if ($item->getProductType() === \Magento\Catalog\Model\Product\Type::TYPE_VIRTUAL || 
+                    $item->getProductType() === \Magento\Downloadable\Model\Product\Type::TYPE_DOWNLOADABLE) {
+                    $productType = 'digital';
+                }
             
                 // Add the item to the cartItems array
                 $cartItems[] = [
-                'productType' => 'physical',
+                'productType' => $productType,
                 'reference' => substr($item->getSku(), 0, 64),
                 'name' => $item->getName(),
                 'quantity' => (int) $item->getQuantity(),

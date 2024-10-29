@@ -6,8 +6,6 @@ use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Briqpay\Payments\Logger\Logger;
-use Magento\Store\Model\ScopeInterface;
-use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Weee\Helper\Data as WeeeHelper;
 
 class GenerateCart
@@ -17,7 +15,6 @@ class GenerateCart
     private $priceCurrency;
     private $storeManager;
     protected $weeeHelper;
-    private $scopeConfig;
 
     const ITEM_TYPE_PHYSICAL = 'physical';
     const ITEM_TYPE_VIRTUAL = 'digital';
@@ -28,14 +25,12 @@ class GenerateCart
         Logger $logger,
         PriceCurrencyInterface $priceCurrency,
         StoreManagerInterface $storeManager,
-        ScopeConfigInterface $scopeConfig,
         WeeeHelper $weeeHelper
     ) {
         $this->checkoutSession = $checkoutSession;
         $this->logger = $logger;
         $this->priceCurrency = $priceCurrency;
         $this->storeManager = $storeManager;
-        $this->scopeConfig = $scopeConfig;
         $this->weeeHelper = $weeeHelper;
     }
 
@@ -65,40 +60,6 @@ class GenerateCart
         $shippingItem = $this->prepareShippingItem($activeCart);
         if ($shippingItem) {
             $items[] = $shippingItem;
-        }
-
-        //Strict rounding logic
-        if ($this->scopeConfig->getValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
-            $totalSummary = 0;
-            foreach ($items as $item) {
-                $unitPrice = $item['unitPrice'];
-                $taxRate = $item['taxRate'];
-                $quantity = $item['quantity'];
-                $lineTotalPrice = $unitPrice * $quantity;
-                $lineTotalVat = $lineTotalPrice * ($taxRate/10000);
-                $totalSummary += (int) round($lineTotalPrice + $lineTotalVat);
-            }
-
-            $totalAmount = $this->getTotalAmount();
-            $this->logger->debug('TotalLine summary: ' .  $totalSummary);
-            $this->logger->debug('Total amount: ' .  $totalAmount);
-
-            $difference = $totalSummary - $totalAmount;
-            if ($difference !== 0) {
-                // Log the difference, including whether it's positive or negative
-                $this->logger->debug('After adjustment: ' .  $totalSummary-$difference);
-                $items[] =  ['productType' => self::ITEM_TYPE_VIRTUAL,
-                'reference' => 'rounding',
-                'name' => 'Rounding',
-                'quantity' => 1,
-                'quantityUnit' => 'pc',
-                'unitPrice' => -$difference,
-                'taxRate' => 0,
-                'discountPercentage' => 0
-                ];
-            } else {
-                $this->logger->debug('No difference between total summary and total amount.');
-            }
         }
 
         return $items;
@@ -134,12 +95,9 @@ class GenerateCart
             $weetotals = $this->weeeHelper->getTotalAmounts($activeCart->getAllVisibleItems());
         }
         
-
         $shippingExclTax = $shippingAddress ? $shippingAddress->getShippingAmount() : 0;
 
-        $totalExAmount = $subtotalExclTax + $shippingExclTax+$weetotals;
-        
-
+        $totalExAmount = $subtotalExclTax + $shippingExclTax+$weetotals; 
 
         return $this->toApiFloat($totalExAmount);
     }

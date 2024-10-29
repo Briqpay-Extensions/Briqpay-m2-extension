@@ -6,10 +6,13 @@ use Briqpay\Payments\Model\Config\SetupConfig;
 use Briqpay\Payments\Model\Utility\GenerateCart;
 use Briqpay\Payments\Model\Utility\AssignBillingAddress;
 use Briqpay\Payments\Model\Utility\AssignShippingAddress;
+use Briqpay\Payments\Model\Utility\RoundingHelper;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Api\CartRepositoryInterface;
+use Magento\Store\Model\ScopeInterface;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Event\ManagerInterface;
 
 class UpdateSession
@@ -47,6 +50,8 @@ class UpdateSession
     protected $eventManager;
     protected $checkoutSession;
     protected $quoteRepository;
+    protected $rounding;
+    private $scopeConfig;
 
     /**
      * UpdateSession constructor.
@@ -64,9 +69,11 @@ class UpdateSession
         GenerateCart $cart,
         AssignBillingAddress $billingData,
         AssignShippingAddress $shippingData,
+        RoundingHelper $rounding,
         CheckoutSession $checkoutSession,
         CartRepositoryInterface $quoteRepository,
         Logger $logger,
+        ScopeConfigInterface $scopeConfig,
         ManagerInterface $eventManager,
     ) {
         $this->setupConfig = $setupConfig;
@@ -76,7 +83,9 @@ class UpdateSession
         $this->quoteRepository = $quoteRepository;
         $this->billingData = $billingData;
         $this->shippingData = $shippingData;
+        $this->rounding = $rounding;
         $this->eventManager = $eventManager;
+        $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
     }
 
@@ -126,8 +135,11 @@ class UpdateSession
             ]);
             throw new \Exception('Error dispatching event session', 0, $e);
         }
-        
 
+        if ($this->scopeConfig->getValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
+            $body = $this->rounding->roundCart($body);
+        }
+        
         try {
             $response = $this->apiClient->request('PATCH', $uri, $body);
             return $response;
