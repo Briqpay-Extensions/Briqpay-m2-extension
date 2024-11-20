@@ -82,6 +82,7 @@ class HandleWebhook
                 $orderStatus = $session['moduleStatus']['payment']['orderStatus'] ?? null;
                 switch ($orderStatus) {
                     case 'order_approved_not_captured':
+                    case 'captured_full':
                     case 'order_pending':
                     case 'order_rejected':
                         $this->handleOrderStatus($quote, $orderStatus, $briqpaySessionStatus, $quoteId, $session);
@@ -116,6 +117,10 @@ class HandleWebhook
             'order_rejected' => [
                 'state' => Order::STATE_CANCELED,
                 'status' => 'canceled',
+            ],
+            'captured_full' => [
+                'state' => Order::STATE_PROCESSING,
+                'status' => Order::STATE_PROCESSING,
             ],
         ];
 

@@ -11,6 +11,14 @@ require([
       return $('input[name="payment[method]"]:checked').val() === "briqpay"
     }
 
+    function isOnPaymentPage() {
+      return window.location.hash === "#payment"
+    }
+
+    function isOnShippingPage() {
+      return window.location.hash === "#shipping"
+    }
+
     // Function to validate only Briqpay's T&C checkboxes
     function validateBriqpayTermsAndConditions() {
       var isValid = true
@@ -81,7 +89,7 @@ require([
                   setTimeout(() => {
                     resolve({ decision: true })
                   }, 10000)
-                ), 
+                ),
               ])
 
               if (!customDecisionResponse.decision) {
@@ -133,7 +141,7 @@ require([
     billingAddressViewModel.isAddressSameAsShipping.subscribe(function (
       isSameAsShipping
     ) {
-      if (!isSameAsShipping) {
+      if (!isSameAsShipping && isOnPaymentPage()) {
         // Billing address is shown, lock the Briqpay module
         if (isBriqpaySelected()) {
           if (window._briqpay && window._briqpay.v3) {
@@ -148,6 +156,20 @@ require([
           }
         }
       }
+    })
+
+    var previousHash = window.location.hash
+
+    window.addEventListener("hashchange", function () {
+      const currentHash = window.location.hash
+
+      if (previousHash === "#payment" && currentHash === "#shipping") {
+        window._briqpay.v3.lockModule("payment", true)
+        window._briqpay.v3.unlockModule("payment")
+      }
+
+      // Update the previous hash
+      previousHash = currentHash
     })
 
     // Handle billing address updates

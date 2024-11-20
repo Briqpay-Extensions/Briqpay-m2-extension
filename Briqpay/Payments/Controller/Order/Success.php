@@ -7,6 +7,7 @@ use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Session\SessionManagerInterface;
 use Briqpay\Payments\Model\Utility\CreateOrder;
+use Magento\Quote\Api\CartRepositoryInterface;
 use Briqpay\Payments\Logger\Logger;
 
 class Success extends Action
@@ -15,6 +16,7 @@ class Success extends Action
     protected $customerSession;
     protected $createOrder;
     protected $logger;
+    protected $quoteRepository;
     protected $sessionManager;
 
     public function __construct(
@@ -23,12 +25,14 @@ class Success extends Action
         CustomerSession $customerSession,
         CreateOrder $createOrder,
         Logger $logger,
+        CartRepositoryInterface $quoteRepository,
         SessionManagerInterface $sessionManager
     ) {
         $this->checkoutSession = $checkoutSession;
         $this->customerSession = $customerSession;
         $this->createOrder = $createOrder;
         $this->logger = $logger;
+        $this->quoteRepository = $quoteRepository;
         $this->sessionManager = $sessionManager;
         parent::__construct($context);
     }
@@ -42,6 +46,11 @@ class Success extends Action
             $this->sessionManager->unsetData('briqpay_session_id');
             return $this->_redirect('checkout/onepage/success');
         } catch (\Exception $e) {
+            //Unset Briqpay sessionid on qoute
+            $quote = $this->checkoutSession->getQuote();
+            $quote->setData('briqpay_session_id', null);
+            $this->quoteRepository->save($quote);
+            //Unset Briqpay sessionid on m2 session
             $this->sessionManager->unsetData('briqpay_session_id');
             $this->logger->critical($e->getMessage());
             $this->messageManager->addErrorMessage(__('Something went wrong while creating the order.'));

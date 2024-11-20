@@ -34,6 +34,10 @@ class AsyncCreateOrder
             'state' => Order::STATE_PROCESSING,
             'status' => Order::STATE_PROCESSING,
         ],
+        'captured_full' => [
+            'state' => Order::STATE_PROCESSING,
+            'status' => Order::STATE_PROCESSING,
+        ],
     ];
 
     public function __construct(

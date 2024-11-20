@@ -98,7 +98,7 @@ class CreateSession
                 'terms' => $config['terms_url']
             ],
             'references' => [
-                'quoteId' => $quoteId
+                'quoteId' => (string) $quoteId
             ],
             'data' => [
                 'order' => [

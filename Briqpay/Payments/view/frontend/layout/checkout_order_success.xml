@@ -4,7 +4,7 @@
         <referenceContainer name="content">
             <block class="Magento\Framework\View\Element\Text" name="custom.success.message">
                 <arguments>
-                    <argument name="text" xsi:type="string">Hello World</argument>
+                    <argument name="text" xsi:type="string"></argument>
                 </arguments>
             </block>
         </referenceContainer>

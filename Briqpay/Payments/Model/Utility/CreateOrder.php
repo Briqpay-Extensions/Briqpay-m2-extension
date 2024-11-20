@@ -104,19 +104,20 @@ class CreateOrder
     {
         try {
             $sessionId = $this->sessionManager->getData('briqpay_session_id');
-// Load the last quote from the checkout session
+            // Load the last quote from the checkout session
             $quote = $this->checkoutSession->getQuote();
 
             if (!$quote->getId()) {
+                $this->logger->info('Quote not found');
                 throw new LocalizedException(__('Quote not found.'));
             }
             if (!$quote->getIsActive()) {
                 $this->logger->info('Attempted to create order using quote that was already used: ' .$quote->getReservedOrderId());
-                return;
+                throw new LocalizedException(__('Quote already converted to order'));
             }
             if (!isset($sessionId)) {
                 $this->logger->info('Empty session id');
-                return;
+                throw new LocalizedException(__('Sessionid not found.'));
             }
             // Load the session data
             $session = $this->readSession->getSession($sessionId);
