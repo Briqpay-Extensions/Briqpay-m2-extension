@@ -63,6 +63,8 @@ class AssignBillingAddress
                 $region = $regionObject->getRegion() ?? "";
             }
 
+            $phone = $billingAddress->getTelephone() ?? "";
+
             $streetLines = $billingAddress->getStreet();
             $streetAddress1 = isset($streetLines[0]) ? $streetLines[0] : '';
             $streetAddress2 = isset($streetLines[1]) ? $streetLines[1] : '';
@@ -98,7 +100,7 @@ class AssignBillingAddress
                 'firstName' => $billingAddress->getFirstname(),
                 'lastName' => $billingAddress->getLastname(),
                 'email' => $customerEmail,
-                'phoneNumber' => $billingAddress->getTelephone(),
+                'phoneNumber' => $phone,
             ];
 
             // Replace null values with empty strings

@@ -63,6 +63,8 @@ class AssignShippingAddress
                 $region = $regionObject->getRegion() ?? "";
             }
 
+            $phone = $shippingAddress->getTelephone() ?? "";
+
             $streetLines = $shippingAddress->getStreet();
             $streetAddress1 = isset($streetLines[0]) ? $streetLines[0] : '';
             $streetAddress2 = isset($streetLines[1]) ? $streetLines[1] : '';
@@ -98,7 +100,7 @@ class AssignShippingAddress
                 'firstName' => $shippingAddress->getFirstname(),
                 'lastName' => $shippingAddress->getLastname(),
                 'email' => $customerEmail,
-                'phoneNumber' => $shippingAddress->getTelephone(),
+                'phoneNumber' => $phone,
             ];
 
             // Replace null values with empty strings
@@ -113,7 +115,6 @@ class AssignShippingAddress
             }
 
             return $shippingData;
-            
         } catch (LocalizedException $e) {
             $this->logger->error('LocalizedException: ' . $e->getMessage());
             return null;
