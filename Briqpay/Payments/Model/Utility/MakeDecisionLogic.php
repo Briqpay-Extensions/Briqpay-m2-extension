@@ -8,6 +8,7 @@ use Briqpay\Payments\Model\Utility\GenerateCart;
 use Briqpay\Payments\Model\Utility\CompareData;
 use Briqpay\Payments\Model\PaymentModule\ReadSession;
 use Briqpay\Payments\Model\PaymentModule\MakeDecision;
+use Briqpay\Payments\Model\PaymentModule\UpdateReference;
 use Magento\Framework\Event\ManagerInterface as EventManager;
 use Magento\Quote\Model\QuoteRepository;
 use Magento\Checkout\Model\Session as CheckoutSession;
@@ -21,6 +22,7 @@ class MakeDecisionLogic
     protected $cart;
     protected $readSession;
     protected $makeDecision;
+    protected $updateReference;
     protected $compareData;
     protected $logger;
     protected $eventManager;
@@ -34,6 +36,7 @@ class MakeDecisionLogic
         GenerateCart $cart,
         ReadSession $readSession,
         MakeDecision $makeDecision,
+        UpdateReference $updateReference,
         CompareData $compareData,
         Logger $logger,
         EventManager $eventManager,
@@ -46,6 +49,7 @@ class MakeDecisionLogic
         $this->cart = $cart;
         $this->readSession = $readSession;
         $this->makeDecision = $makeDecision;
+        $this->updateReference = $updateReference;
         $this->compareData = $compareData;
         $this->logger = $logger;
         $this->eventManager = $eventManager;
@@ -134,6 +138,11 @@ class MakeDecisionLogic
             }
 
             $this->logger->debug('Final Decision', ['Final' => $decision]);
+
+            if ($decision) {
+                $this->updateReference->updateReference($sessionId, $quoteId);
+            }
+
             $this->makeDecision->makeDecision($sessionId, $decision, $softError); // Pass softError as the third param
     
             return $decision;

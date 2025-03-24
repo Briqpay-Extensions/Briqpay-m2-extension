@@ -10,6 +10,7 @@ use Briqpay\Payments\Logger\Logger;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Customer\Api\Data\GroupInterface;
+use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Customer\Model\Session as CustomerSession;
 
 class AsyncCreateOrder
@@ -17,6 +18,7 @@ class AsyncCreateOrder
     protected $quoteRepository;
     protected $quoteManagement;
     protected $customerRepository;
+    protected $orderRepository;
     protected $logger;
     protected $customerSession;
      /**
@@ -44,6 +46,7 @@ class AsyncCreateOrder
         CartRepositoryInterface $quoteRepository,
         QuoteManagement $quoteManagement,
         CustomerRepositoryInterface $customerRepository,
+        OrderRepositoryInterface $orderRepository,
         Logger $logger,
         ScopeConfigInterface $scopeConfig,
         CustomerSession $customerSession
@@ -51,6 +54,7 @@ class AsyncCreateOrder
         $this->quoteRepository = $quoteRepository;
         $this->quoteManagement = $quoteManagement;
         $this->customerRepository = $customerRepository;
+        $this->orderRepository = $orderRepository;
         $this->logger = $logger;
         $this->customerSession = $customerSession;
         $this->scopeConfig = $scopeConfig;
@@ -60,62 +64,67 @@ class AsyncCreateOrder
     {
         try {
             $this->logger->info('Received webhook payload: ' . json_encode($sessionData));
-
+    
             // Load quote
             $quote = $this->quoteRepository->get($quoteId);
-
+    
             if (!$quote->getId()) {
                 throw new LocalizedException(__('Quote not found.'));
             }
-
+    
             // Validate email format
             $billingEmail = $this->extractBillingEmail($quote, $sessionData);
             if (!filter_var($billingEmail, FILTER_VALIDATE_EMAIL)) {
                 throw new LocalizedException(__('Invalid email format for billing address: %1', $billingEmail));
             }
-
+    
             // Extract moduleStatus
             $moduleStatus = $sessionData['moduleStatus'] ?? [];
-
+    
             // Determine order status from moduleStatus
             if (isset($moduleStatus['payment']['orderStatus'])) {
                 $incomingStatus = $moduleStatus['payment']['orderStatus'];
             } else {
                 throw new LocalizedException(__('Order status not found in moduleStatus.'));
             }
-
+    
             // Check if the order has already been processed
-            if ($quote->getReservedOrderId()) {
-                $this->logger->debug('Order already processed for quote ID: ' . $quoteId);
-                return;
+            $reservedOrderId = $quote->getReservedOrderId();
+            if ($reservedOrderId) {
+                // This is before you attempt to submit the order, so don't look for the order yet.
+                $this->logger->debug('Quote has reserved order ID: ' . $reservedOrderId);
             }
-
+    
             // Set customer information
             $this->setCustomerInformation($quote, $billingEmail);
             $transactions = $sessionData['data']['transactions'] ?? [];
             $pspDisplayName = !empty($transactions) ? $transactions[0]['pspDisplayName'] : '';
             $quote->setData('briqpay_psp_display_name', $pspDisplayName);
+    
             // Collect totals and save quote
             $quote->collectTotals()->save();
-
+    
             // Convert quote to order
             $order = $this->quoteManagement->submit($quote);
-
+    
             if (!$order || !$order->getId()) {
                 throw new LocalizedException(__('Order could not be created.'));
             }
-
-            // Set order state and status based on incoming status
+    
+            // At this point, the order has been created successfully.
+            $this->logger->info('Order created successfully with order ID: ' . $order->getId());
+    
+            // Now, apply the state and status based on incoming status
             if (isset($this->statusMapping[$incomingStatus])) {
                 $state = $this->statusMapping[$incomingStatus]['state'];
                 $status = $this->statusMapping[$incomingStatus]['status'];
-
+    
                 $order->setState($state);
                 $order->setStatus($status);
-
+    
                 // Additional data related to the order
                 $this->setOrderAdditionalData($order, $sessionData);
-
+    
                 // Save order
                 $order->save();
             } else {
@@ -208,7 +217,6 @@ class AsyncCreateOrder
         // Set session status
         if ($briqpaySessionStatus !== '') {
             $order->setData('briqpay_session_status', $briqpaySessionStatus);
-           
         } else {
             $this->logger->warning('Briqpay Session Status is empty.');
         }
