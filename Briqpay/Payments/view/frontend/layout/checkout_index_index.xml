@@ -2,7 +2,7 @@
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <head>
         <script src="https://api.briqpay.com/briq.min.js" src_type="url" async="true" />
-        <script src="Briqpay_Payments::js/briqpay.js" after="Magento_Checkout/js/view/shipping" />
+        <script src="Briqpay_Payments::js/briqpay.js" defer="defer" />
     </head>
     <body>
         <referenceBlock name="checkout.root">
