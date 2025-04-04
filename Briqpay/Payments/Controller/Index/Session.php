@@ -12,6 +12,7 @@ use Briqpay\Payments\Model\PaymentModule\CreateSession;
 use Briqpay\Payments\Model\PaymentModule\ReadSession;
 use Briqpay\Payments\Logger\Logger;
 use Magento\Quote\Api\CartRepositoryInterface;
+
 class Session extends Action
 {
     protected $resultJsonFactory;
@@ -32,7 +33,7 @@ class Session extends Action
         ReadSession $readSession,
         Logger $logger,
         SessionManagerInterface $sessionManager,
-        CartRepositoryInterface $quoteRepository 
+        CartRepositoryInterface $quoteRepository
     ) {
         parent::__construct($context);
         $this->resultJsonFactory = $resultJsonFactory;
@@ -52,14 +53,26 @@ class Session extends Action
 
         try {
             $sessionId = $this->sessionManager->getData('briqpay_session_id');
+            $quoteId = $this->checkoutSession->getQuoteId();
+
             if ($sessionId) {
+                $readSessionData = $this->readSession->getSession($sessionId);
+            }
+            $triggerNewSession = false;
+
+            if ($sessionId && ($quoteId != $readSessionData['references']['quoteId'])) {
+                // $this->logger->info('Quotes did not match, starting new session');
+                $triggerNewSession = true;
+            }
+
+            if ($sessionId && !$triggerNewSession) {
                 $session = $this->reinitialiseSession->reinitialiseSession($sessionId, $guestEmail);
             } else {
                 $quoteId = $this->checkoutSession->getQuoteId();
                 $quote = $this->quoteRepository->get($quoteId);
     
                 $briqpaySessionId = $quote->getData('briqpay_session_id');
-                if (!is_null($briqpaySessionId)) {
+                if (!is_null($briqpaySessionId) && !$triggerNewSession) {
                     $session = $this->reinitialiseSession->reinitialiseSession($briqpaySessionId, $guestEmail);
                     $this->sessionManager->start();
                     $this->sessionManager->setData('briqpay_session_id', $briqpaySessionId);
