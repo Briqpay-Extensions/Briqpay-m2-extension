@@ -22,8 +22,8 @@ class UpgradeSchema implements UpgradeSchemaInterface
         $setup->startSetup();
         $this->logger->info('UpgradeSchema: start');
 
-        if (version_compare($context->getVersion(), '1.0.17', '<')) {
-            $this->logger->info('UpgradeSchema: version is less than 1.0.17');
+        if (version_compare($context->getVersion(), '1.1.2', '<')) {
+            $this->logger->info('UpgradeSchema: version is less than 1.1.2');
 
             $this->createOrderTableColumns($setup);
             $this->createQuoteTableColumns($setup);
@@ -119,7 +119,7 @@ class UpgradeSchema implements UpgradeSchemaInterface
          // Define columns to be added to sales_order
          $quoteColumns = [
                
-            'briqpay_session_id' => [
+        'briqpay_session_id' => [
         'type' => Table::TYPE_TEXT,
         'nullable' => true,
         'comment' => 'Briqpay Session ID'
@@ -167,6 +167,16 @@ class UpgradeSchema implements UpgradeSchemaInterface
                 'type' => Table::TYPE_TEXT,
                 'nullable' => true,
                 'comment' => 'Briqpay PSP Reservation ID'
+            ],
+            'briqpay_psp_provider' => [
+                'type' => Table::TYPE_TEXT,
+                'nullable' => true,
+                'comment' => 'Briqpay PSP name'
+            ],
+            'briqpay_psp_underlying_payment_method' => [
+                'type' => Table::TYPE_TEXT,
+                'nullable' => true,
+                'comment' => 'Briqpay PSP Underlying payment method'
             ],
             'briqpay_backoffice_url' => [
                 'type' => Table::TYPE_TEXT,

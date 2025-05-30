@@ -4,6 +4,7 @@ namespace Briqpay\Payments\Rest;
 
 use Magento\Framework\HTTP\Client\Curl;
 use Briqpay\Payments\Logger\Logger;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Module\ModuleListInterface;
 use Magento\Framework\App\ProductMetadataInterface;
@@ -41,6 +42,8 @@ class ApiClient
      */
     protected $storeManager;
 
+    protected $scopeHelper;
+
     /**
      * ApiClient constructor.
      *
@@ -57,7 +60,8 @@ class ApiClient
         ScopeConfigInterface $scopeConfig,
         ModuleListInterface $moduleList,
         ProductMetadataInterface $productMetadata,
-        StoreManagerInterface $storeManager
+        StoreManagerInterface $storeManager,
+        ScopeHelper $scopeHelper,
     ) {
         $this->curl = $curl;
         $this->logger = $logger;
@@ -65,6 +69,7 @@ class ApiClient
         $this->moduleList = $moduleList;
         $this->productMetadata = $productMetadata;
         $this->storeManager = $storeManager;
+        $this->scopeHelper = $scopeHelper;
     }
 
     /**
@@ -74,7 +79,7 @@ class ApiClient
      */
     private function getApiUrl(): string
     {
-        $testmode = $this->scopeConfig->getValue('payment/briqpay/test_mode');
+        $testmode = $this->scopeHelper->getScopedConfigValue('payment/briqpay/test_mode');
         if ($testmode) {
             return 'https://playground-api.briqpay.com';
         }
@@ -89,8 +94,8 @@ class ApiClient
      */
     private function getApiKey(): string
     {
-        $clientId = $this->scopeConfig->getValue('payment/briqpay/client_id');
-        $sharedSecret = $this->scopeConfig->getValue('payment/briqpay/shared_secret');
+        $clientId = $this->scopeHelper->getScopedConfigValue('payment/briqpay/client_id');
+        $sharedSecret = $this->scopeHelper->getScopedConfigValue('payment/briqpay/shared_secret');
 
         if (!$clientId || !$sharedSecret) {
             throw new \Exception('API credentials are not configured properly.');
@@ -182,7 +187,7 @@ class ApiClient
             if ($status >= 200 && $status < 300) {
                 return $responseData;
             } else {
-                if (isset($responseData['error']['code']) && $responseData['error']['code'] === 'CANCEL_NOT_SUPPORTED' && 
+                if (isset($responseData['error']['code']) && $responseData['error']['code'] === 'CANCEL_NOT_SUPPORTED' &&
                     isset($responseData['error']['message']) && $responseData['error']['message'] === 'Cancel is not supported for the selected payment provider') {
                     return ['error' => 'Order not canceled not at PSP'];
                 }

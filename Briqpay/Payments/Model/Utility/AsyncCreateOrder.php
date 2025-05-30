@@ -7,6 +7,7 @@ use Magento\Quote\Model\QuoteManagement;
 use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Sales\Model\Order;
 use Briqpay\Payments\Logger\Logger;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Customer\Api\Data\GroupInterface;
@@ -25,6 +26,7 @@ class AsyncCreateOrder
      * @var ScopeConfigInterface
      */
     protected $scopeConfig;
+    protected $scopeHelper;
 
     // Define status mapping
     protected $statusMapping = [
@@ -49,7 +51,8 @@ class AsyncCreateOrder
         OrderRepositoryInterface $orderRepository,
         Logger $logger,
         ScopeConfigInterface $scopeConfig,
-        CustomerSession $customerSession
+        CustomerSession $customerSession,
+        ScopeHelper $scopeHelper,
     ) {
         $this->quoteRepository = $quoteRepository;
         $this->quoteManagement = $quoteManagement;
@@ -58,6 +61,7 @@ class AsyncCreateOrder
         $this->logger = $logger;
         $this->customerSession = $customerSession;
         $this->scopeConfig = $scopeConfig;
+        $this->scopeHelper = $scopeHelper;
     }
 
     public function createOrderFromWebhook($quoteId, $sessionData)
@@ -98,6 +102,7 @@ class AsyncCreateOrder
             // Set customer information
             $this->setCustomerInformation($quote, $billingEmail);
             $transactions = $sessionData['data']['transactions'] ?? [];
+            $pspMetaData = $session['data']['pspMetadata'] ?? [];
             $pspDisplayName = !empty($transactions) ? $transactions[0]['pspDisplayName'] : '';
             $quote->setData('briqpay_psp_display_name', $pspDisplayName);
     
@@ -161,13 +166,14 @@ class AsyncCreateOrder
         
         // Extract transactions
         $transactions = $sessionData['data']['transactions'] ?? [];
-        
+        $pspMetaData = $sessionData['data']['pspMetadata'] ?? [];
+        $underlyingPspName = !empty($pspMetaData) ? $pspMetaData['description'] : '';
+        $pspProviderName = !empty($transactions) ? $transactions[0]['pspIntegrationName'] : '';
         $pspDisplayName = !empty($transactions) ? $transactions[0]['pspDisplayName'] : '';
         $pspReservationId = !empty($transactions) ? $transactions[0]['reservationId'] : '';
         $briqpaySessionStatus = !empty($transactions) ? $transactions[0]['status'] : '';
     
        
-    
         // Set PSP display name
         if ($pspDisplayName !== '') {
             $order->setData('briqpay_psp_display_name', $pspDisplayName);
@@ -207,12 +213,15 @@ class AsyncCreateOrder
         }
         
         if ($merchantId !== '' && $sessionId !== '') {
-            $testmode = $this->scopeConfig->getValue('payment/briqpay/test_mode', \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
+            $testmode = $this->scopeHelper->getScopedConfigValue('payment/briqpay/test_mode', \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
             $backofficeUrl = 'https://app.briqpay.com/dashboard/sessions/orders/' . $sessionId . '?test=' . $testmode . '&merchantId=' . $merchantId;
             $order->setData('briqpay_backoffice_url', $backofficeUrl);
         } else {
             $this->logger->warning('Cannot construct backoffice URL, merchantId or sessionId is empty.');
         }
+
+        $order->setData('briqpay_psp_provider', $pspProviderName);
+        $order->setData('briqpay_psp_underlying_payment_method', $underlyingPspName);
     
         // Set session status
         if ($briqpaySessionStatus !== '') {

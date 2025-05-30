@@ -3,6 +3,7 @@
 namespace Briqpay\Payments\Model\Config;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Framework\Locale\ResolverInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Framework\UrlInterface;
@@ -30,6 +31,8 @@ class SetupConfig
      */
     protected $urlBuilder;
 
+    protected $scopeHelper;
+
     /**
      * SetupConfig constructor.
      *
@@ -42,12 +45,14 @@ class SetupConfig
         ScopeConfigInterface $scopeConfig,
         ResolverInterface $localeResolver,
         StoreManagerInterface $storeManager,
-        UrlInterface $urlBuilder
+        UrlInterface $urlBuilder,
+        ScopeHelper $scopeHelper,
     ) {
         $this->scopeConfig = $scopeConfig;
         $this->localeResolver = $localeResolver;
         $this->storeManager = $storeManager;
         $this->urlBuilder = $urlBuilder;
+        $this->scopeHelper = $scopeHelper;
     }
 
     /**
@@ -58,15 +63,15 @@ class SetupConfig
     public function getSetupConfig(): array
     {
         $locale = $this->localeResolver->getLocale();
-        $countryCode = $this->scopeConfig->getValue('general/country/default', ScopeInterface::SCOPE_STORE);
+        $countryCode = $this->scopeHelper->getScopedConfigValue('general/country/default', ScopeInterface::SCOPE_STORE);
         $currencyCode = $this->storeManager->getStore()->getCurrentCurrencyCode();
         $redirectUrl = $this->urlBuilder->getUrl('checkout/order/success');
         $hooksUrl = $this->urlBuilder->getUrl('briqpay/webhooks');
-        $customerType = $this->scopeConfig->getValue(
+        $customerType = $this->scopeHelper->getScopedConfigValue(
             'payment/briqpay/checkout_type',
             ScopeInterface::SCOPE_STORE
         );
-        $termsPageIdentifier = $this->scopeConfig->getValue(
+        $termsPageIdentifier = $this->scopeHelper->getScopedConfigValue(
             'payment/briqpay/terms_conditions_page',
             ScopeInterface::SCOPE_STORE
         );

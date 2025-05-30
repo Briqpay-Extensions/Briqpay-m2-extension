@@ -58,122 +58,129 @@ class CaptureOrder
 
     public function capture($order, $captureCart, $captureAmount)
     {
-        $this->logger->info('CaptureOrder::capture method called.');
+        $this->logger->info('CaptureOrder::capture method called.', [
+        'orderId' => $order->getIncrementId(),
+        'captureAmount' => $captureAmount
+        ]);
 
-        
         $currency = $order->getOrderCurrencyCode();
-        $this->orderCurrency = $order->getOrderCurrencyCode();
-        // Calculate total amounts
-        $amountIncVat =$captureAmount*100;
+        $this->orderCurrency = $currency;
+
+        // Convert amount to integer minor units (e.g., cents)
+        $amountIncVat = (int) round($captureAmount * 100);
 
         $store = $this->storeManager->getStore();
         $baseCurrencyCode = $store->getBaseCurrencyCode();
         $this->baseCurrency = $baseCurrencyCode;
-        $currentCurrencyCode = $store->getCurrentCurrencyCode();
 
-// Get the website base currency code
+        $currentCurrencyCode = $store->getCurrentCurrencyCode();
         $website = $store->getWebsite();
         $websiteBaseCurrencyCode = $website->getBaseCurrencyCode();
 
-
+        // If website base currency differs from order currency, convert capture amount to base currency minor units
         if ($websiteBaseCurrencyCode !== $currency) {
             $baseCurrency = $this->currencyFactory->create()->load($websiteBaseCurrencyCode);
-     
-            $amountIncVat = round($baseCurrency->convert($amountIncVat, $currency), 0);
+            $amountIncVat = (int) round($baseCurrency->convert($amountIncVat, $currency), 0);
         }
 
+        // Calculate totals based on captureCart items
+        $calculatedIncVat = (int) $this->getIncvatTotalBasedOnCart($captureCart);
 
-        $amountExVat = $this->getExvatTotalBasedOnCart($captureCart);
-        $calculatedIncVat = (int)$this->getIncvatTotalBasedOnCart($captureCart);
-
-        $this->logger->debug('Order details retrieved.', [
-            'currency' => $currency,
-            'amountIncVat' => $amountIncVat,
-            'amountIncVat_Calculated' => $calculatedIncVat,
-           'amountExVat' => $amountExVat,
-            'orderId' => $order->getIncrementId()
-        ]);
-
-    
-
-        // Get the Briqpay session ID from the quote
         $briqpaySessionId = $order->getData('briqpay_session_id');
-
         if (!$briqpaySessionId) {
-            $this->logger->error('Briqpay session ID is not available in the quote.');
-            throw new LocalizedException(__('Briqpay session ID is not available in the quote.'));
+            $this->logger->error('Briqpay session ID is missing from order.');
+            throw new LocalizedException(__('Briqpay session ID is not available in the order.'));
+        }
+        $this->logger->info('Briqpay session ID retrieved.', ['briqpaySessionId' => $briqpaySessionId]);
+
+        // Prepare cart items and include discounts if any
+        $cartItems = $this->prepareCartItems($captureCart);
+        $discountItems = $this->prepareDiscountItem($captureCart);
+        foreach ($discountItems as $item) {
+            if ($item !== null) {
+                $cartItems[] = $item;
+            }
         }
 
-        $this->logger->info('Briqpay session ID retrieved.', [
-            'briqpaySessionId' => $briqpaySessionId
-        ]);
-
-        // Prepare cart items for the current capture
-        $cartItems = $this->prepareCartItems($captureCart);
-
-        $weetotals = 0;
+        // Handle WEEE tax surcharge if enabled
+        $weeTotals = 0;
         if ($this->weeeHelper->isEnabled()) {
-            foreach ($cartItems as $cartitemcheck) {
-                if ($cartitemcheck['productType'] === "surcharge") {
-                    $amountExVat += $cartitemcheck['unitPrice']*$cartitemcheck['quantity'];
-                    $weeTax = $cartitemcheck['taxRate'];
-                    $weeTaxMultiplier = 1;
-                    if ($weeTax > 0) {
-                        $weeTaxMultiplier = 1+ $weeTax/10000;
-                    }
-                    $weetotals = $cartitemcheck['unitPrice']*$cartitemcheck['quantity'] *$weeTaxMultiplier;
-                   
-                   // $this->logger->info("getRowWeeeTaxInclTax= ". $this->weeeHelper->getRowWeeeTaxInclTax($item));
+            foreach ($cartItems as $cartItem) {
+                if ($cartItem['productType'] === "surcharge") {
+                    $amountExVat += $cartItem['unitPrice'] * $cartItem['quantity'];
+                    $weeTax = $cartItem['taxRate'];
+                    $weeTaxMultiplier = ($weeTax > 0) ? (1 + $weeTax / 10000) : 1;
+                    $weeTotals += $cartItem['unitPrice'] * $cartItem['quantity'] * $weeTaxMultiplier;
                 }
             }
         }
-     
-        if (abs(($calculatedIncVat+$weetotals) - $amountIncVat) > 1) {
-            // Include shipping fee in the cart items
+
+        // Retrieve totals from the order for shipping logic
+        $shippingInclTax = $order->getShippingInclTax();
+        $totalPreviouslyCaptured = $order->getTotalPaid();
+        $grandTotal = $order->getGrandTotal();
+
+        // Check if shipping was already invoiced / captured
+        $shippingAlreadyInvoiced = false;
+        foreach ($order->getInvoiceCollection() as $invoice) {
+            if ($invoice->getState() == Invoice::STATE_PAID
+            && (float) $invoice->getShippingAmount() > 0
+            ) {
+                $shippingAlreadyInvoiced = true;
+                break;
+            }
+        }
+        $shippingAlreadyCaptured = $shippingAlreadyInvoiced;
+
+        $this->logger->debug('Shipping and payment info', [
+            'ShippingInclTax' => $shippingInclTax,
+            'TotalPreviouslyCaptured' => $totalPreviouslyCaptured,
+            'GrandTotal' => $grandTotal,
+            'ShippingAlreadyCaptured' => $shippingAlreadyCaptured ? 'true' : 'false'
+        ]);
+
+        // Add shipping item only if not already captured and shipping cost is greater than zero
+        if (!$shippingAlreadyCaptured && $shippingInclTax > 0) {
             $shippingItem = $this->prepareShippingItem($order);
             if ($shippingItem) {
                 $cartItems[] = $shippingItem;
-                // Adjust amountExVat to include shipping
-                $amountExVat += $shippingItem['unitPrice'];
             }
         }
-        
-        
-        // Prepare request body
-        $body = [
-            'data' => [
-                'order' => [
-                    'currency' => $currency,
-                    'amountIncVat' => round($amountIncVat, 0),
-                    'amountExVat' => $amountExVat,
-                    'cart' => $cartItems
-                ]
-            ]
-        ];
 
-        $this->logger->debug('Request body prepared for Briqpay capture.', [
-            'body' => $body
+        $amountExVat = $this->getExVatFromCart($cartItems);
+
+        $this->logger->debug('Calculation discrepancy check', [
+        'differenceGreaterThan1' => abs(($calculatedIncVat + $weeTotals) - $amountIncVat) > 1
         ]);
 
-        // Make API request to Briqpay
+        // Prepare request body for Briqpay
+        $body = [
+        'data' => [
+            'order' => [
+                'currency' => $currency,
+                'amountIncVat' => round($amountIncVat, 0),
+                'amountExVat' => $amountExVat,
+                'cart' => $cartItems
+            ]
+        ]
+        ];
+
+        $this->logger->debug('Request body prepared for Briqpay capture.', ['body' => $body]);
+
         $uri = '/v3/session/' . $briqpaySessionId . '/order/capture';
 
         try {
             $response = $this->apiClient->request('POST', $uri, $body);
-            $this->logger->info('Briqpay capture request sent.', [
-            'response' => $response
-            ]);
+            $this->logger->info('Briqpay capture request sent.', ['response' => $response]);
 
-            // Check if remaining amount is zero or less to mark the order as completed
-            $grandTotal = $order->getGrandTotal();
+            // If total paid covers grand total, mark order as complete
             $totalPaid = $order->getTotalPaid();
 
             if ($totalPaid >= $grandTotal) {
-                // Update order status to "completed"
                 $order->setState(\Magento\Sales\Model\Order::STATE_COMPLETE)
-                    ->setStatus(\Magento\Sales\Model\Order::STATE_COMPLETE);
+                ->setStatus(\Magento\Sales\Model\Order::STATE_COMPLETE);
                 $this->orderRepository->save($order);
-                $this->logger->info('Order status updated to "completed".');
+                $this->logger->info('Order status updated to "complete".');
             }
 
             return $response;
@@ -194,21 +201,53 @@ class CaptureOrder
         return $this->toApiFloat($totalIncVat);
     }
 
-    private function calculateAmountExVat(Invoice $invoice)
-    {
-        // Calculate the total amount excluding VAT for the order (products + shipping)
-        $totalExVat = $invoice->getSubtotal();
-        return $this->toApiFloat($totalExVat);
-    }
-
     private function toApiFloat($float)
     {
         return (int) round($float * 100, 0);
     }
 
+    private function filterCartLinesForCapture(array $cart, InvoiceInterface $invoice): array
+    {
+        $skuQtyToInvoice = [];
+        foreach ($invoice->getAllItems() as $item) {
+            if ($item->getQty() > 0) {
+                $skuQtyToInvoice[$item->getSku()] = $item->getQty();
+            }
+        }
+
+        $filtered = [];
+
+        foreach ($cart as $line) {
+            $ref = $line['reference'] ?? '';
+
+            if ($line['productType'] === 'physical' && isset($skuQtyToInvoice[$ref])) {
+                $filtered[] = $line;
+            } elseif ($line['productType'] === 'shipping_fee') {
+                $filtered[] = $line;
+            } elseif ($line['productType'] === 'discount'
+            && $this->isDiscountForReferencedSku($ref, $skuQtyToInvoice)
+            ) {
+                $filtered[] = $line;
+            }
+        }
+
+        return $filtered;
+    }
+
+    private function isDiscountForReferencedSku(string $discountRef, array $skuQtyToInvoice): bool
+    {
+        foreach ($skuQtyToInvoice as $sku => $_) {
+            if (str_contains($discountRef, $sku)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function prepareCartItems($captureCart): array
     {
         $cartItems = [];
+
         foreach ($captureCart as $item) {
             // Check if item quantity is greater than 0 and exclude shipping items
             if ($item->getQuantity() > 0 && $item->getProductType() !== 'shipping') {
@@ -220,8 +259,8 @@ class CaptureOrder
                 // Calculate the tax rate
                 $taxRate = $item->getTaxPercent()* 100;
                 $productType = 'physical'; // Default to physical
-                if ($item->getProductType() === \Magento\Catalog\Model\Product\Type::TYPE_VIRTUAL || 
-                    $item->getProductType() === \Magento\Downloadable\Model\Product\Type::TYPE_DOWNLOADABLE) {
+                if ($item->getProductType() === \Magento\Catalog\Model\Product\Type::TYPE_VIRTUAL ||
+                $item->getProductType() === \Magento\Downloadable\Model\Product\Type::TYPE_DOWNLOADABLE) {
                     $productType = 'digital';
                 }
             
@@ -238,7 +277,7 @@ class CaptureOrder
                 ];
 
                 if ($this->weeeHelper->isEnabled()) {
-                        $weetax = $this->weeeHelper->getWeeeTaxAppliedAmount($item);
+                    $weetax = $this->weeeHelper->getWeeeTaxAppliedAmount($item);
                     if ($weetax > 0) {
                         $cartItems[] = $this->addWeeTaxItems($item);
                     }
@@ -248,6 +287,42 @@ class CaptureOrder
 
         return $cartItems;
     }
+
+    private function prepareDiscountItem($captureCart)
+    {
+        $cartItems = [];
+        foreach ($captureCart as $item) {
+            if ($item->getQuantity() > 0 && $item->getProductType() !== 'shipping') {
+                $discountIncVat = $item->getDiscountAmount();
+
+                if ($discountIncVat <= 0) {
+                    continue;
+                }
+
+                // Calculate tax rate from item
+                $taxRate = $item->getTaxPercent(); // e.g. 25
+
+                // Convert inc. VAT to ex. VAT
+                $discountExVat = $discountIncVat / (1 + ($taxRate / 100));
+
+                $store = $this->storeManager->getStore();
+                $convertedDiscount = $this->priceCurrency->convert($discountExVat, $store);
+
+                $cartItems[] = [
+                'productType' => 'discount',
+                'reference' => substr($item->getSku(), 0, 64) . '_discount',
+                'name' => 'Discount for ' . $item->getName(),
+                'quantity' => 1,
+                'quantityUnit' => 'pc',
+                'unitPrice' => -$this->toApiFloat($convertedDiscount), // Excl. VAT
+                'taxRate' => $this->toApiFloat($taxRate), // 2500 for 25%
+                'discountPercentage' => 0
+                ];
+            }
+        }
+        return $cartItems;
+    }
+
     private function addWeeTaxItems($item)
     {
         
@@ -259,16 +334,16 @@ class CaptureOrder
         }
         
         
-             return [
-            'productType' => "surcharge",
-            'reference' => substr($item->getSku(), 0, 64).'_weee_tax',
-            'name' => 'WEEE Tax for '.$item->getName(),
-            'quantity' => (int) $item->getQuantity(),
-            'quantityUnit' => 'pc',
-            'unitPrice' => $this->toApiFloat($weetax),
-            'taxRate' => $weeTaxRate,
-            'discountPercentage' => 0
-             ];
+         return [
+        'productType' => "surcharge",
+        'reference' => substr($item->getSku(), 0, 64).'_weee_tax',
+        'name' => 'WEEE Tax for '.$item->getName(),
+        'quantity' => (int) $item->getQuantity(),
+        'quantityUnit' => 'pc',
+        'unitPrice' => $this->toApiFloat($weetax),
+        'taxRate' => $weeTaxRate,
+        'discountPercentage' => 0
+         ];
     }
     
     private function getIncvatTotalBasedOnCart($captureCart)
@@ -302,32 +377,24 @@ class CaptureOrder
     
     
 
-    private function getExvatTotalBasedOnCart($captureCart)
+    private function getExVatFromCart(array $cartItems): float
     {
         $exvat = 0;
 
-
-        
-        
-        
-        foreach ($captureCart as $item) {
-            $this->logger->info("checkin item...".$item->getId());
-            if ($item->getProductType() !== 'shipping') {
-                $price =  $item->getPrice();
-                
-                $exvat += $this->toApiFloat($price)  * $item->getQuantity();
-            }
+        foreach ($cartItems as $item) {
+            $unitPrice = ($item['unitPrice'] * $item['quantity'])/100;
+            $exvat+=$unitPrice;
         }
-    
-        return $exvat;
+
+        return $this->toApiFloat($exvat);
     }
 
-     /**
-     * Prepare shipping item for the invoice.
-     *
-     * @param InvoiceInterface $invoice
-     * @return array|null
-     */
+ /**
+ * Prepare shipping item for the invoice.
+ *
+ * @param InvoiceInterface $invoice
+ * @return array|null
+ */
     private function prepareShippingItem($order): ?array
     {
         $shippingAmount = $order->getShippingAmount();

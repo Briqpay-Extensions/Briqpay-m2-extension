@@ -4,23 +4,32 @@ namespace Briqpay\Payments\Logger;
 
 use Monolog\Logger as MonologLogger;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Store\Model\ScopeInterface;
 
 class Logger extends MonologLogger
 {
     protected $scopeConfig;
     protected $logLevel;
+    protected $scopeHelper;
     private $sensitiveKeys = ['firstName', 'lastName', 'email', 'streetAddress','streetAddress2', 'phoneNumber'];
     private $testMode;
     public function __construct(
         $name,
         ScopeConfigInterface $scopeConfig,
+        ScopeHelper $scopeHelper,
         array $handlers = []
     ) {
         $this->scopeConfig = $scopeConfig;
+        $this->scopeHelper = $scopeHelper;
         parent::__construct($name, $handlers);
         $this->logLevel = $this->getLogLevel();
-        $this->testMode  = $this->scopeConfig->getValue('payment/briqpay/test_mode');
+        $this->testMode  = $this->getTestMode();
+    }
+
+    protected function getTestMode()
+    {
+        return $this->scopeHelper->getScopedConfigValue('payment/briqpay/test_mode');
     }
 
     /**
@@ -30,7 +39,7 @@ class Logger extends MonologLogger
      */
     protected function getLogLevel()
     {
-        $logLevel = $this->scopeConfig->getValue(
+        $logLevel = $this->scopeHelper->getScopedConfigValue(
             'payment/briqpay/advanced/log_level',
             ScopeInterface::SCOPE_STORE
         );

@@ -1,0 +1,32 @@
+<script type="text/javascript">
+    require(['Magento_Customer/js/customer-data'], function (customerData) {
+        let attempts = 0;
+        const maxAttempts = 10;
+        const interval = 300; // ms
+
+        const intervalId = setInterval(function () {
+            try {
+                attempts++;
+
+                // This will throw if 'cart' is not yet available
+                const cart = customerData.get('cart');
+                
+                // Defensive: check if cart has data property
+                if (typeof cart !== 'undefined') {
+                    customerData.invalidate(['cart']);
+                    customerData.reload(['cart'], true);
+                    console.log('Briqpay: cart reset after retry, attempt:', attempts);
+                    clearInterval(intervalId);
+                }
+
+                if (attempts >= maxAttempts) {
+                    console.warn('Briqpay: Max attempts reached for cart reset');
+                    clearInterval(intervalId);
+                }
+            } catch (e) {
+                console.warn('Briqpay: Waiting for customerData cart...', e);
+                // Keep trying
+            }
+        }, interval);
+    });
+</script>

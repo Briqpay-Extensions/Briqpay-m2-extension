@@ -1,15 +1,27 @@
 <?php /** @var \Briqpay\Payments\Block\Order\View\Custom $block */ ?>
-<?php if ($block->hasBriqpayData()): ?>
+<?php if ($block->hasBriqpayData()) : ?>
     <div class="transaction-info-container">
         <span class="title">Transaction Information</span>
 
-        <?php if ($block->hasPspDisplayName()): ?>
+        <?php if ($block->hasPspDisplayName()) : ?>
             <div>
                 <strong>PSP Name:</strong> <?php echo $block->getPspDisplayName(); ?>
             </div>
         <?php endif; ?>
 
-        <?php if ($block->hasBriqpaySessionId()): ?>
+        <?php if ($block->hasBriqpayUnderLyingPsp()) : ?>
+            <div>
+                <strong>Chosen Payment Method:</strong> <?php echo $block->getPspUnderlyingName(); ?>
+            </div>
+        <?php endif; ?>        
+
+        <?php if ($block->hasBriqpayPspProviderName()) : ?>
+            <div>
+                <strong>Provider Name:</strong> <?php echo $block->getPspProviderName(); ?>
+            </div>
+        <?php endif; ?>        
+
+        <?php if ($block->hasBriqpaySessionId()) : ?>
             <div>
                 <strong>Briqpay Session ID:</strong> 
                 <a href="<?php echo $block->getBriqpayBackofficeUrl(); ?>" target="_blank">
@@ -18,14 +30,14 @@
             </div>
         <?php endif; ?>
 
-        <?php if ($block->hasBriqpayPspReservationId()): ?>
+        <?php if ($block->hasBriqpayPspReservationId()) : ?>
             <div>
                 <strong>Briqpay PSP Reservation ID:</strong>
                 <?php echo $block->getBriqpayPspReservationId(); ?>
             </div>
         <?php endif; ?>
 
-        <?php if ($block->hasBriqpaySessionStatus()): ?>
+        <?php if ($block->hasBriqpaySessionStatus()) : ?>
             <div>
                 <strong>Briqpay Transaction Status:</strong>
                 <?php echo $block->getBriqpaySessionStatus(); ?>

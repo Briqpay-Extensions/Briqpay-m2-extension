@@ -51,7 +51,9 @@ class Custom extends Template
             $order->getData('briqpay_session_id') ||
             $order->getData('briqpay_psp_reservationId') ||
             $order->getData('briqpay_backoffice_url') ||
-            $order->getData('briqpay_session_status')
+            $order->getData('briqpay_session_status') ||
+            $order->getData('briqpay_psp_provider') ||
+            $order->getData('briqpay_psp_underlying_payment_method')
         );
     }
 
@@ -75,6 +77,28 @@ class Custom extends Template
     {
         $order = $this->getOrder();
         return $order ? $order->getData('briqpay_psp_display_name') : null;
+    }
+
+     /**
+     * Retrieve PSP display name for the order
+     *
+     * @return string|null
+     */
+    public function getPspProviderName()
+    {
+        $order = $this->getOrder();
+        return $order ? $order->getData('briqpay_psp_provider') : null;
+    }
+
+     /**
+     * Retrieve PSP display name for the order
+     *
+     * @return string|null
+     */
+    public function getPspUnderlyingName()
+    {
+        $order = $this->getOrder();
+        return $order ? $order->getData('briqpay_psp_underlying_payment_method') : null;
     }
 
     /**
@@ -163,5 +187,27 @@ class Custom extends Template
     {
         $order = $this->getOrder();
         return $order && $order->getData('briqpay_session_status');
+    }
+
+     /**
+     * Check if Briqpay session underlying psp exists for the order
+     *
+     * @return bool
+     */
+    public function hasBriqpayUnderLyingPsp()
+    {
+        $order = $this->getOrder();
+        return $order && $order->getData('briqpay_psp_underlying_payment_method');
+    }
+
+     /**
+     * Check if Briqpay session psp provider name exists for the order
+     *
+     * @return bool
+     */
+    public function hasBriqpayPspProviderName()
+    {
+        $order = $this->getOrder();
+        return $order && $order->getData('briqpay_psp_provider');
     }
 }

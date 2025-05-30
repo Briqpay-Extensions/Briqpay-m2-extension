@@ -47,7 +47,13 @@ class GenerateCart
         
         foreach ($activeCart->getAllVisibleItems() as $item) {
             $items[] = $this->prepareCartItem($item);
+
+            $discountLine = $this->prepareDiscountItem($item);
+            if ($discountLine !== null) {
+                $items[] = $discountLine;
+            }
         }
+
         if ($this->weeeHelper->isEnabled()) {
             foreach ($activeCart->getAllVisibleItems() as $item) {
                 $weetax = $this->weeeHelper->getWeeeTaxAppliedAmount($item);
@@ -86,21 +92,33 @@ class GenerateCart
             return 0;
         }
 
-        $subtotalExclTax = $activeCart->getSubtotal();
+        $subtotalExclTax = $activeCart->getSubtotal(); // excl. tax
         $shippingAddress = $activeCart->getShippingAddress();
+        $shippingExclTax = $shippingAddress ? $shippingAddress->getShippingAmount() : 0;
 
-        // neeed to add wee here aswell...
+        // WEEE adjustments
         $weetotals = 0;
         if ($this->weeeHelper->isEnabled() && !$this->weeeHelper->includeInSubtotal()) {
             $weetotals = $this->weeeHelper->getTotalAmounts($activeCart->getAllVisibleItems());
         }
-        
-        $shippingExclTax = $shippingAddress ? $shippingAddress->getShippingAmount() : 0;
 
-        $totalExAmount = $subtotalExclTax + $shippingExclTax+$weetotals; 
+        // Calculate total discount excl. tax
+        $discountExVatTotal = 0;
+        foreach ($activeCart->getAllVisibleItems() as $item) {
+            $discountIncVat = $item->getDiscountAmount();
+
+            if ($discountIncVat > 0) {
+                $taxRate = $item->getTaxPercent();
+                $discountExVat = $discountIncVat / (1 + ($taxRate / 100));
+                $discountExVatTotal += $discountExVat;
+            }
+        }
+
+        $totalExAmount = $subtotalExclTax + $shippingExclTax + $weetotals - $discountExVatTotal;
 
         return $this->toApiFloat($totalExAmount);
     }
+
     private function addWeeTaxItems($item)
     {
         $store = $this->storeManager->getStore();
@@ -155,7 +173,37 @@ class GenerateCart
             'quantityUnit' => 'pc',
             'unitPrice' => $this->toApiFloat($price),
             'taxRate' => $this->toApiFloat($item->getTaxPercent()),
-            'discountPercentage' => $this->toApiFloat($item->getDiscountPercent())
+            'discountPercentage' => 0
+        ];
+    }
+
+    private function prepareDiscountItem($item)
+    {
+        $discountIncVat = $item->getDiscountAmount();
+        //+ $item->getDiscountTaxCompensationAmount();
+
+        if ($discountIncVat <= 0) {
+            return null;
+        }
+
+        // Calculate tax rate from item
+        $taxRate = $item->getTaxPercent(); // e.g. 25
+
+        // Convert inc. VAT to ex. VAT
+        $discountExVat = $discountIncVat / (1 + ($taxRate / 100));
+
+        $store = $this->storeManager->getStore();
+        $convertedDiscount = $this->priceCurrency->convert($discountExVat, $store);
+
+        return [
+        'productType' => 'discount',
+        'reference' => substr($item->getSku(), 0, 64) . '_discount',
+        'name' => 'Discount for ' . $item->getName(),
+        'quantity' => 1,
+        'quantityUnit' => 'pc',
+        'unitPrice' => -$this->toApiFloat($convertedDiscount), // Excl. VAT
+        'taxRate' => $this->toApiFloat($taxRate), // 2500 for 25%
+        'discountPercentage' => 0
         ];
     }
 

@@ -66,6 +66,52 @@ require([
       window._briqpay.v3.onReady(function () {
         try {
           window._briqpay.v3.unlockModule("payment")
+          if (window.checkoutConfig.payment?.briqpay?.briqpay_overlay) {
+            _briqpay.subscribe("paymentProcessStarted", function () {
+              const briqpay = document.getElementById("briqpay-checkout-window")
+              if (briqpay) {
+                briqpay.style.position = "relative"
+                briqpay.style.zIndex = "9999"
+              }
+
+              // Set styles on #briqpay-overlay
+              const overlay = document.getElementById("briqpay-overlay")
+              if (overlay) {
+                overlay.style.display = "block"
+                overlay.style.top = "0"
+                overlay.style.left = "0"
+                overlay.style.width = "100%"
+                overlay.style.height = "100%"
+                overlay.style.position = "absolute"
+                overlay.style.background = "white"
+                overlay.style.opacity = "0.8" 
+                overlay.style.zIndex = "9998"
+              }
+            })
+            _briqpay.subscribe("paymentProcessCancelled", function () {
+              // Revert styles on #briqpay
+              const briqpay = document.getElementById("briqpay")
+              if (briqpay) {
+                briqpay.style.position = ""
+                briqpay.style.zIndex = ""
+              }
+
+              // Hide and reset styles on #briqpay-overlay
+              const overlay = document.getElementById("briqpay-overlay")
+              if (overlay) {
+                overlay.style.display = "none"
+                overlay.style.top = ""
+                overlay.style.left = ""
+                overlay.style.width = ""
+                overlay.style.height = ""
+                overlay.style.position = ""
+                overlay.style.background = ""
+                overlay.style.opacity = ""
+                overlay.style.zIndex = ""
+              }
+            })
+          }
+
           _briqpay.subscribe("make_decision", async function (data) {
             if (window.checkoutConfig.payment?.briqpay?.customDecisionLogic) {
               const promiseForResponse = new Promise((resolve) => {

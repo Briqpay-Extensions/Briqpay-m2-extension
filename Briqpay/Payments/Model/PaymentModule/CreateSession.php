@@ -8,6 +8,7 @@ use Briqpay\Payments\Model\Utility\AssignShippingAddress;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
 use Briqpay\Payments\Model\Utility\RoundingHelper;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Framework\Event\ManagerInterface;
@@ -29,6 +30,7 @@ class CreateSession
     protected $eventManager;
     protected $urlBuilder; // Add UrlBuilder property
     private $scopeConfig;
+    protected $scopeHelper;
 
     public function __construct(
         SetupConfig $setupConfig,
@@ -42,7 +44,8 @@ class CreateSession
         CartRepositoryInterface $quoteRepository,
         ManagerInterface $eventManager,
         ScopeConfigInterface $scopeConfig,
-        UrlInterface $urlBuilder // Add UrlBuilder to constructor
+        UrlInterface $urlBuilder, // Add UrlBuilder to constructor
+        ScopeHelper $scopeHelper
     ) {
         $this->setupConfig = $setupConfig;
         $this->apiClient = $apiClient;
@@ -56,6 +59,7 @@ class CreateSession
         $this->eventManager = $eventManager;
         $this->scopeConfig = $scopeConfig;
         $this->urlBuilder = $urlBuilder; // Initialize UrlBuilder
+        $this->scopeHelper = $scopeHelper;
     }
 
     public function getPaymentModule($fallbackEmail = null)
@@ -152,7 +156,7 @@ class CreateSession
         // Log the body after dispatching the event
         $this->logger->debug('Body after dispatch:', $body);
 
-        if ($this->scopeConfig->getValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
+        if ($this->scopeHelper->getScopedConfigValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
             $body = $this->rounding->roundCart($body);
         }
         // Log the body before making the request

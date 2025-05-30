@@ -9,6 +9,7 @@ use Briqpay\Payments\Model\Utility\AssignShippingAddress;
 use Briqpay\Payments\Model\Utility\RoundingHelper;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Store\Model\ScopeInterface;
@@ -52,6 +53,7 @@ class UpdateSession
     protected $quoteRepository;
     protected $rounding;
     private $scopeConfig;
+    protected $scopeHelper;
 
     /**
      * UpdateSession constructor.
@@ -75,6 +77,7 @@ class UpdateSession
         Logger $logger,
         ScopeConfigInterface $scopeConfig,
         ManagerInterface $eventManager,
+        ScopeHelper $scopeHelper,
     ) {
         $this->setupConfig = $setupConfig;
         $this->apiClient = $apiClient;
@@ -87,6 +90,7 @@ class UpdateSession
         $this->eventManager = $eventManager;
         $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
+        $this->scopeHelper = $scopeHelper;
     }
 
     /**
@@ -136,7 +140,7 @@ class UpdateSession
             throw new \Exception('Error dispatching event session', 0, $e);
         }
 
-        if ($this->scopeConfig->getValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
+        if ($this->scopeHelper->getScopedConfigValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
             $body = $this->rounding->roundCart($body);
         }
         

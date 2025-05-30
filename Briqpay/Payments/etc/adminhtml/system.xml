@@ -63,6 +63,12 @@
                         <comment>Apply strict rounding by adding a rounding adjustment line to ensure that the total of line items matches the total amount exactly.</comment>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     </field>
+
+                    <field id="payment_overlay" translate="label comment" sortOrder="130" type="select" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Overlay during purchase</label>
+                        <comment>Apply overlay around the Briqpay iFrame during purchase.</comment>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    </field>
                 </group>
             </group>
         </section>

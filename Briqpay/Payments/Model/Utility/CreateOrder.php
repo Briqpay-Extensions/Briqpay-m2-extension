@@ -7,6 +7,7 @@ use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Session\SessionManagerInterface;
 use Briqpay\Payments\Model\PaymentModule\ReadSession;
+use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Sales\Model\Order;
 use Briqpay\Payments\Logger\Logger;
@@ -60,6 +61,9 @@ class CreateOrder
     protected $logger;
 
     protected $transactionFactory;
+
+    protected $scopeHelper;
+
     /**
      * CreateOrder constructor.
      * @param QuoteFactory $quoteFactory
@@ -82,6 +86,7 @@ class CreateOrder
         Order $order,
         Logger $logger,
         TransactionFactory $transactionFactory,
+        ScopeHelper $scopeHelper,
     ) {
         $this->quoteFactory = $quoteFactory;
         $this->quoteManagement = $quoteManagement;
@@ -93,6 +98,7 @@ class CreateOrder
         $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
         $this->transactionFactory = $transactionFactory;
+        $this->scopeHelper = $scopeHelper;
     }
 
     /**
@@ -134,12 +140,18 @@ class CreateOrder
 
             $this->logger->info('Session create order: ' . json_encode($session));
 
+            // Extract PspMetaData
+            $pspMetaData = $session['data']['pspMetadata'] ?? [];
+
             // Extract transactions
             $transactions = $session['data']['transactions'] ?? [];
             $pspDisplayName = !empty($transactions) ? $transactions[0]['pspDisplayName'] : '';
+            $pspProviderName = !empty($transactions) ? $transactions[0]['pspIntegrationName'] : '';
             $pspReservationId = !empty($transactions) ? $transactions[0]['reservationId'] : '';
             $jwt = $session['clientToken'];
             $briqpaySessionStatus = !empty($transactions) ? $transactions[0]['status'] : '';
+
+            $underlyingPspName = !empty($pspMetaData) ? $pspMetaData['description'] : '';
 
             // Initialize variables for business-specific data
             $companyCin = null;
@@ -172,7 +184,7 @@ class CreateOrder
             $decodedArray = json_decode(base64_decode($jwtExplode[1]), true);
 
             $merchantId = $decodedArray['merchantId'];
-            $testmode = $this->scopeConfig->getValue('payment/briqpay/test_mode', \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
+            $testmode = $this->scopeHelper->getScopedConfigValue('payment/briqpay/test_mode', \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
             $backofficeUrl = 'https://app.briqpay.com/dashboard/sessions/orders/' . $sessionId . '?test='.$testmode.'&merchantId=' . $merchantId;
 
             
@@ -223,6 +235,8 @@ class CreateOrder
             $order->setData('briqpay_session_id', $sessionId);
             $order->setData('briqpay_backoffice_url', $backofficeUrl);
             $order->setData('briqpay_session_status', $briqpaySessionStatus);
+            $order->setData('briqpay_psp_provider', $pspProviderName);
+            $order->setData('briqpay_psp_underlying_payment_method', $underlyingPspName);
 
             // Save business specific data to the order if customer is 'business'
             if ($session['customerType'] === 'business') {

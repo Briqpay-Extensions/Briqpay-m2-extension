@@ -18,6 +18,7 @@
                 <order_status>pending_payment</order_status> <!-- Set your default order status -->
                 <checkout_title>Payment Methods</checkout_title>
                 <strict_rounding>0</strict_rounding>
+                <payment_overlay>0</payment_overlay>
             </briqpay>
         </payment>
     </default>

@@ -61,7 +61,7 @@ class Session extends Action
             $triggerNewSession = false;
 
             if ($sessionId && ($quoteId != $readSessionData['references']['quoteId'])) {
-                // $this->logger->info('Quotes did not match, starting new session');
+                $this->logger->info('Quotes did not match, starting new session');
                 $triggerNewSession = true;
             }
 

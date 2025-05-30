@@ -110,7 +110,7 @@ class PaymentMethod extends \Magento\Payment\Model\Method\AbstractMethod
                 $captureId=   $this->captureOrder->capture($order, $captureCart, $amount)["captureId"];
             }
             $payment->setTransactionId($captureId);
-          //  $payment->setAdditionalInformation()
+            //$payment->setAdditionalInformation()
             $payment->setMethod('briqpay');
             $payment->save();
             return $this;
