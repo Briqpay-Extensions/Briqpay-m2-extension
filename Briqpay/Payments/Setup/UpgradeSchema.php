@@ -22,8 +22,8 @@ class UpgradeSchema implements UpgradeSchemaInterface
         $setup->startSetup();
         $this->logger->info('UpgradeSchema: start');
 
-        if (version_compare($context->getVersion(), '1.1.2', '<')) {
-            $this->logger->info('UpgradeSchema: version is less than 1.1.2');
+        if (version_compare($context->getVersion(), '1.1.3', '<')) {
+            $this->logger->info('UpgradeSchema: version is less than 1.1.3');
 
             $this->createOrderTableColumns($setup);
             $this->createQuoteTableColumns($setup);

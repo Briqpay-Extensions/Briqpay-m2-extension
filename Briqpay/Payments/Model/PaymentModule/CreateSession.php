@@ -139,6 +139,13 @@ class CreateSession
             'modules' => [
                 "loadModules" => [
                     'payment'
+                ],
+                "config" => [
+                    "payment" => [
+                        "decision" => [
+                            "enabled" => true
+                        ]
+                    ]
                 ]
             ]
         ];

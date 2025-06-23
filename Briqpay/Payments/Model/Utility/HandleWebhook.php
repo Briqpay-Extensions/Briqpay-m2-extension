@@ -53,10 +53,13 @@ class HandleWebhook
             $quoteId = $data['quoteId'];
             $quote = $this->quoteRepository->get($quoteId);
 
-           
-
             $event = $data['event'] ?? null;
             $sessionId = $data['sessionId'] ?? null;
+
+            if (is_null($quote->getData('briqpay_session_id'))) {
+                $quote->setData('briqpay_session_id', $sessionId);
+                $this->quoteRepository->save($quote);
+            }
 
             // Get session data
             $session = $this->readSession->getSession($sessionId);

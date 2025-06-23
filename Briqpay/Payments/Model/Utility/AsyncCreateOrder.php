@@ -71,6 +71,11 @@ class AsyncCreateOrder
     
             // Load quote
             $quote = $this->quoteRepository->get($quoteId);
+
+            if (is_null($quote->getData('briqpay_session_id'))) {
+                $quote->setData('briqpay_session_id', $sessionData['sessionId']);
+                $this->quoteRepository->save($quote);
+            }
     
             if (!$quote->getId()) {
                 throw new LocalizedException(__('Quote not found.'));
