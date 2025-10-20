@@ -150,8 +150,9 @@ class CreateOrder
             $pspReservationId = !empty($transactions) ? $transactions[0]['reservationId'] : '';
             $jwt = $session['clientToken'];
             $briqpaySessionStatus = !empty($transactions) ? $transactions[0]['status'] : '';
-
+            $secondaryReference = $transactions[0]['secondaryReservationId'] ?? '';
             $underlyingPspName = !empty($pspMetaData) ? $pspMetaData['description'] : '';
+
 
             // Initialize variables for business-specific data
             $companyCin = null;
@@ -237,6 +238,7 @@ class CreateOrder
             $order->setData('briqpay_session_status', $briqpaySessionStatus);
             $order->setData('briqpay_psp_provider', $pspProviderName);
             $order->setData('briqpay_psp_underlying_payment_method', $underlyingPspName);
+            $order->setData('briqpay_secondary_reservationId', $secondaryReference);
 
             // Save business specific data to the order if customer is 'business'
             if ($session['customerType'] === 'business') {

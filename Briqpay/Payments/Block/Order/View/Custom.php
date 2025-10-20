@@ -135,6 +135,17 @@ class Custom extends Template
     }
 
     /**
+     * Check if Briqpay PSP reservation ID exists for the order
+     *
+     * @return bool
+     */
+    public function hasBriqpayPspSecondaryReservationId()
+    {
+        $order = $this->getOrder();
+        return $order && $order->getData('briqpay_secondary_reservationId');
+    }    
+
+    /**
      * Retrieve Briqpay PSP reservation ID for the order
      *
      * @return string|null
@@ -143,6 +154,17 @@ class Custom extends Template
     {
         $order = $this->getOrder();
         return $order ? $order->getData('briqpay_psp_reservationId') : null;
+    }
+
+    /**
+     * Retrieve Briqpay PSP reservation ID for the order
+     *
+     * @return string|null
+     */
+    public function getBriqpayPspSecondaryReservationId()
+    {
+        $order = $this->getOrder();
+        return $order ? $order->getData('briqpay_secondary_reservationId') : null;
     }
 
     /**

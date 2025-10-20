@@ -22,8 +22,8 @@ class UpgradeSchema implements UpgradeSchemaInterface
         $setup->startSetup();
         $this->logger->info('UpgradeSchema: start');
 
-        if (version_compare($context->getVersion(), '1.1.3', '<')) {
-            $this->logger->info('UpgradeSchema: version is less than 1.1.3');
+        if (version_compare($context->getVersion(), '1.1.4', '<')) {
+            $this->logger->info('UpgradeSchema: version is less than 1.1.4');
 
             $this->createOrderTableColumns($setup);
             $this->createQuoteTableColumns($setup);
@@ -178,6 +178,11 @@ class UpgradeSchema implements UpgradeSchemaInterface
                 'nullable' => true,
                 'comment' => 'Briqpay PSP Underlying payment method'
             ],
+            'briqpay_secondary_reservationId' => [
+                'type' => Table::TYPE_TEXT,
+                'nullable' => true,
+                'comment' => 'Briqpay PSP Secondary ReservationId'
+            ],            
             'briqpay_backoffice_url' => [
                 'type' => Table::TYPE_TEXT,
                 'nullable' => true,

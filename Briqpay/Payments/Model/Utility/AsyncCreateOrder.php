@@ -177,8 +177,8 @@ class AsyncCreateOrder
         $pspDisplayName = !empty($transactions) ? $transactions[0]['pspDisplayName'] : '';
         $pspReservationId = !empty($transactions) ? $transactions[0]['reservationId'] : '';
         $briqpaySessionStatus = !empty($transactions) ? $transactions[0]['status'] : '';
+        $secondaryReference = $transactions[0]['secondaryReservationId'] ?? '';
     
-       
         // Set PSP display name
         if ($pspDisplayName !== '') {
             $order->setData('briqpay_psp_display_name', $pspDisplayName);
@@ -227,6 +227,7 @@ class AsyncCreateOrder
 
         $order->setData('briqpay_psp_provider', $pspProviderName);
         $order->setData('briqpay_psp_underlying_payment_method', $underlyingPspName);
+        $order->setData('briqpay_secondary_reservationId', $secondaryReference);
     
         // Set session status
         if ($briqpaySessionStatus !== '') {

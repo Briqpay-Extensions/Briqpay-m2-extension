@@ -37,6 +37,13 @@
             </div>
         <?php endif; ?>
 
+        <?php if ($block->hasBriqpayPspSecondaryReservationId()) : ?>
+            <div>
+                <strong>Briqpay PSP Secondary ID:</strong>
+                <?php echo $block->getBriqpayPspSecondaryReservationId(); ?>
+            </div>
+        <?php endif; ?>
+
         <?php if ($block->hasBriqpaySessionStatus()) : ?>
             <div>
                 <strong>Briqpay Transaction Status:</strong>

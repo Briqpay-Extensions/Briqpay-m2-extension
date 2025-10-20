@@ -7,6 +7,7 @@ use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Briqpay\Payments\Logger\Logger;
 use Magento\Weee\Helper\Data as WeeeHelper;
+use Magento\Catalog\Helper\Image as ImageHelper;
 
 class GenerateCart
 {
@@ -15,6 +16,7 @@ class GenerateCart
     private $priceCurrency;
     private $storeManager;
     protected $weeeHelper;
+    private $imageHelper;
 
     const ITEM_TYPE_PHYSICAL = 'physical';
     const ITEM_TYPE_VIRTUAL = 'digital';
@@ -25,13 +27,15 @@ class GenerateCart
         Logger $logger,
         PriceCurrencyInterface $priceCurrency,
         StoreManagerInterface $storeManager,
-        WeeeHelper $weeeHelper
+        WeeeHelper $weeeHelper,
+        ImageHelper $imageHelper
     ) {
         $this->checkoutSession = $checkoutSession;
         $this->logger = $logger;
         $this->priceCurrency = $priceCurrency;
         $this->storeManager = $storeManager;
         $this->weeeHelper = $weeeHelper;
+        $this->imageHelper = $imageHelper;
     }
 
     public function getCart()
@@ -43,7 +47,6 @@ class GenerateCart
         }
 
         $items = [];
-        $carttest =$activeCart->getAllItems();
         
         foreach ($activeCart->getAllVisibleItems() as $item) {
             $items[] = $this->prepareCartItem($item);
@@ -62,6 +65,7 @@ class GenerateCart
                 }
             }
         }
+
         // Add shipping as an item
         $shippingItem = $this->prepareShippingItem($activeCart);
         if ($shippingItem) {
@@ -126,32 +130,30 @@ class GenerateCart
         $currentCurrencyCode = $store->getCurrentCurrencyCode();
         $website = $store->getWebsite();
         $websiteBaseCurrencyCode = $website->getBaseCurrencyCode();
-    
-    
+
         $price = $item->getPrice();
         if ($websiteBaseCurrencyCode !== $currentCurrencyCode) {
             $price = $this->priceCurrency->convert($item->getPrice(), $store);
         }
 
         $weetax = $this->weeeHelper->getWeeeTaxAppliedAmount($item);
-        $getWeeeTaxAppliedRowAmount  = $this->weeeHelper->getWeeeTaxAppliedRowAmount($item);
-        $weetaxInclTax = $this->weeeHelper->getWeeeTaxInclTax($item);
         $weeTaxRate = 0;
         if ($this->weeeHelper->isTaxable()) {
-            $weeTaxRate =$this->toApiFloat($item->getTaxPercent());
+            $weeTaxRate = $this->toApiFloat($item->getTaxPercent());
         }
        
-             return [
+        return [
             'productType' => "surcharge",
             'reference' => substr($item->getSku(), 0, 64).'_weee_tax',
             'name' => 'WEEE Tax for '.$item->getName(),
             'quantity' => ceil($this->getItemQty($item)),
             'quantityUnit' => 'pc',
             'unitPrice' => $this->toApiFloat($weetax),
-            'taxRate' => $weeTaxRate ,
+            'taxRate' => $weeTaxRate,
             'discountPercentage' => 0
-             ];
+        ];
     }
+
     private function prepareCartItem($item)
     {
         $store = $this->storeManager->getStore();
@@ -160,12 +162,30 @@ class GenerateCart
         $website = $store->getWebsite();
         $websiteBaseCurrencyCode = $website->getBaseCurrencyCode();
         
-        
         $price = $item->getPrice();
         if ($websiteBaseCurrencyCode !== $currentCurrencyCode) {
             $price = $this->priceCurrency->convert($item->getPrice(), $store);
         }
-        return [
+
+        $product = $item->getProduct();
+
+        // Default: no image
+        $imageUrl = null;
+
+        // Check all image roles
+        $imageAttr = $product->getData('image');
+        $smallImageAttr = $product->getData('small_image');
+        $thumbnailAttr = $product->getData('thumbnail');
+
+        if ($imageAttr && $imageAttr !== 'no_selection') {
+            $imageUrl = $this->imageHelper->init($product, 'product_base_image')->getUrl();
+        } elseif ($smallImageAttr && $smallImageAttr !== 'no_selection') {
+            $imageUrl = $this->imageHelper->init($product, 'product_small_image')->getUrl();
+        } elseif ($thumbnailAttr && $thumbnailAttr !== 'no_selection') {
+            $imageUrl = $this->imageHelper->init($product, 'product_thumbnail_image')->getUrl();
+        }
+
+        $cartItem = [
             'productType' => $this->getProductType($item),
             'reference' => substr($item->getSku(), 0, 64),
             'name' => $item->getName(),
@@ -175,19 +195,24 @@ class GenerateCart
             'taxRate' => $this->toApiFloat($item->getTaxPercent()),
             'discountPercentage' => 0
         ];
+
+        if ($imageUrl) {
+            $cartItem['imageUrl'] = $imageUrl;
+        }
+
+        return $cartItem;
     }
 
     private function prepareDiscountItem($item)
     {
         $discountIncVat = $item->getDiscountAmount();
-        //+ $item->getDiscountTaxCompensationAmount();
 
         if ($discountIncVat <= 0) {
             return null;
         }
 
         // Calculate tax rate from item
-        $taxRate = $item->getTaxPercent(); // e.g. 25
+        $taxRate = $item->getTaxPercent();
 
         // Convert inc. VAT to ex. VAT
         $discountExVat = $discountIncVat / (1 + ($taxRate / 100));
@@ -196,14 +221,14 @@ class GenerateCart
         $convertedDiscount = $this->priceCurrency->convert($discountExVat, $store);
 
         return [
-        'productType' => 'discount',
-        'reference' => substr($item->getSku(), 0, 64) . '_discount',
-        'name' => 'Discount for ' . $item->getName(),
-        'quantity' => 1,
-        'quantityUnit' => 'pc',
-        'unitPrice' => -$this->toApiFloat($convertedDiscount), // Excl. VAT
-        'taxRate' => $this->toApiFloat($taxRate), // 2500 for 25%
-        'discountPercentage' => 0
+            'productType' => 'discount',
+            'reference' => substr($item->getSku(), 0, 64) . '_discount',
+            'name' => 'Discount for ' . $item->getName(),
+            'quantity' => 1,
+            'quantityUnit' => 'pc',
+            'unitPrice' => -$this->toApiFloat($convertedDiscount), // Excl. VAT
+            'taxRate' => $this->toApiFloat($taxRate),
+            'discountPercentage' => 0
         ];
     }
 
@@ -246,7 +271,6 @@ class GenerateCart
 
     private function getProductType($item)
     {
-        
         return $item->getIsVirtual() ? self::ITEM_TYPE_VIRTUAL : self::ITEM_TYPE_PHYSICAL;
     }
 
