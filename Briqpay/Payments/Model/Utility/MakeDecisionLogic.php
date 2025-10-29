@@ -74,7 +74,7 @@ class MakeDecisionLogic
             $quote = $this->quoteRepository->get($quoteId);
     
             // Validate required quote fields before proceeding
-            if (!$quote->getCustomerEmail()) {
+            if (!$quote->getCustomerEmail() && !$fallbackEmail) {
                 $validationErrors[] = 'Customer email is missing.';
                 $softError = true; // Set softError to true if an error is found
             }
