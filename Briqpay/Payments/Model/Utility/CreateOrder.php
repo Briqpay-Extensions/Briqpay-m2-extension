@@ -151,7 +151,7 @@ class CreateOrder
             $jwt = $session['clientToken'];
             $briqpaySessionStatus = !empty($transactions) ? $transactions[0]['status'] : '';
             $secondaryReference = $transactions[0]['secondaryReservationId'] ?? '';
-            $underlyingPspName = !empty($pspMetaData) ? $pspMetaData['description'] : '';
+            $underlyingPspName = $pspMetaData['description'] ?? '';
 
 
             // Initialize variables for business-specific data
