@@ -126,74 +126,74 @@ class GenerateCart
     private function addWeeTaxItems($item)
     {
         $store = $this->storeManager->getStore();
-        $baseCurrencyCode = $store->getBaseCurrencyCode();
-        $currentCurrencyCode = $store->getCurrentCurrencyCode();
-        $website = $store->getWebsite();
-        $websiteBaseCurrencyCode = $website->getBaseCurrencyCode();
-
-        $price = $item->getPrice();
-        if ($websiteBaseCurrencyCode !== $currentCurrencyCode) {
-            $price = $this->priceCurrency->convert($item->getPrice(), $store);
-        }
 
         $weetax = $this->weeeHelper->getWeeeTaxAppliedAmount($item);
-        $weeTaxRate = 0;
-        if ($this->weeeHelper->isTaxable()) {
-            $weeTaxRate = $this->toApiFloat($item->getTaxPercent());
-        }
-       
+        $weeTaxRate = $this->weeeHelper->isTaxable()
+            ? $this->toApiFloat($item->getTaxPercent())
+            : 0;
+
+        $weetax = $this->priceCurrency->convert($weetax, $store);
+
         return [
-            'productType' => "surcharge",
-            'reference' => substr($item->getSku(), 0, 64).'_weee_tax',
-            'name' => 'WEEE Tax for '.$item->getName(),
-            'quantity' => ceil($this->getItemQty($item)),
-            'quantityUnit' => 'pc',
+            'productType' => 'surcharge',
+            'reference'   => substr($item->getSku(), 0, 64) . '_weee_tax',
+            'name'        => 'WEEE Tax for ' . $item->getName(),
+            'quantity'    => ceil($this->getItemQty($item)),
+            'quantityUnit'=> 'pc',
             'unitPrice' => $this->toApiFloat($weetax),
-            'taxRate' => $weeTaxRate,
-            'discountPercentage' => 0
+            'taxRate'   => $weeTaxRate,
+            'discountPercentage' => 0,
+            'unitPriceIncVat' => $this->toApiFloat($weetax),
+            'totalAmount'    => $this->toApiFloat($weetax),
+            'totalVatAmount' => 0,
         ];
     }
+
 
     private function prepareCartItem($item)
     {
         $store = $this->storeManager->getStore();
-        $baseCurrencyCode = $store->getBaseCurrencyCode();
+        $websiteBaseCurrencyCode = $store->getWebsite()->getBaseCurrencyCode();
         $currentCurrencyCode = $store->getCurrentCurrencyCode();
-        $website = $store->getWebsite();
-        $websiteBaseCurrencyCode = $website->getBaseCurrencyCode();
-        
-        $price = $item->getPrice();
+
+        $qty = ceil($this->getItemQty($item));
+
+        // Magento-native values
+        $unitPriceExVat  = $item->getPrice();
+        $unitPriceIncVat = $item->getPriceInclTax();
+        $rowTotalIncVat  = $item->getRowTotalInclTax();
+        $taxAmount       = $item->getTaxAmount();
+
         if ($websiteBaseCurrencyCode !== $currentCurrencyCode) {
-            $price = $this->priceCurrency->convert($item->getPrice(), $store);
+            $unitPriceExVat  = $this->priceCurrency->convert($unitPriceExVat, $store);
+            $unitPriceIncVat = $this->priceCurrency->convert($unitPriceIncVat, $store);
+            $rowTotalIncVat  = $this->priceCurrency->convert($rowTotalIncVat, $store);
+            $taxAmount       = $this->priceCurrency->convert($taxAmount, $store);
         }
 
         $product = $item->getProduct();
-
-        // Default: no image
         $imageUrl = null;
 
-        // Check all image roles
-        $imageAttr = $product->getData('image');
-        $smallImageAttr = $product->getData('small_image');
-        $thumbnailAttr = $product->getData('thumbnail');
-
-        if ($imageAttr && $imageAttr !== 'no_selection') {
+        if ($product->getImage() && $product->getImage() !== 'no_selection') {
             $imageUrl = $this->imageHelper->init($product, 'product_base_image')->getUrl();
-        } elseif ($smallImageAttr && $smallImageAttr !== 'no_selection') {
+        } elseif ($product->getSmallImage() && $product->getSmallImage() !== 'no_selection') {
             $imageUrl = $this->imageHelper->init($product, 'product_small_image')->getUrl();
-        } elseif ($thumbnailAttr && $thumbnailAttr !== 'no_selection') {
+        } elseif ($product->getThumbnail() && $product->getThumbnail() !== 'no_selection') {
             $imageUrl = $this->imageHelper->init($product, 'product_thumbnail_image')->getUrl();
         }
 
         $cartItem = [
             'productType' => $this->getProductType($item),
-            'reference' => substr($item->getSku(), 0, 64),
-            'name' => $item->getName(),
-            'quantity' => ceil($this->getItemQty($item)),
-            'quantityUnit' => 'pc',
-            'unitPrice' => $this->toApiFloat($price),
-            'taxRate' => $this->toApiFloat($item->getTaxPercent()),
-            'discountPercentage' => 0
+            'reference'   => substr($item->getSku(), 0, 64),
+            'name'        => $item->getName(),
+            'quantity'    => $qty,
+            'quantityUnit'=> 'pc',
+            'unitPrice' => $this->toApiFloat($unitPriceExVat),
+            'taxRate'   => $this->toApiFloat($item->getTaxPercent()),
+            'discountPercentage' => 0,
+            'unitPriceIncVat' => $this->toApiFloat($unitPriceIncVat),
+            'totalAmount'    => $this->toApiFloat($rowTotalIncVat),
+            'totalVatAmount' => $this->toApiFloat($taxAmount),
         ];
 
         if ($imageUrl) {
@@ -203,6 +203,7 @@ class GenerateCart
         return $cartItem;
     }
 
+
     private function prepareDiscountItem($item)
     {
         $discountIncVat = $item->getDiscountAmount();
@@ -211,51 +212,63 @@ class GenerateCart
             return null;
         }
 
-        // Calculate tax rate from item
         $taxRate = $item->getTaxPercent();
-
-        // Convert inc. VAT to ex. VAT
         $discountExVat = $discountIncVat / (1 + ($taxRate / 100));
 
         $store = $this->storeManager->getStore();
-        $convertedDiscount = $this->priceCurrency->convert($discountExVat, $store);
+        $discountExVat  = $this->priceCurrency->convert($discountExVat, $store);
+        $discountIncVat = $this->priceCurrency->convert($discountIncVat, $store);
+
+        $taxAmount = $discountIncVat - $discountExVat;
 
         return [
             'productType' => 'discount',
-            'reference' => substr($item->getSku(), 0, 64) . '_discount',
-            'name' => 'Discount for ' . $item->getName(),
-            'quantity' => 1,
-            'quantityUnit' => 'pc',
-            'unitPrice' => -$this->toApiFloat($convertedDiscount), // Excl. VAT
-            'taxRate' => $this->toApiFloat($taxRate),
-            'discountPercentage' => 0
+            'reference'   => substr($item->getSku(), 0, 64) . '_discount',
+            'name'        => 'Discount for ' . $item->getName(),
+            'quantity'    => 1,
+            'quantityUnit'=> 'pc',
+            'unitPrice' => -$this->toApiFloat($discountExVat),
+            'taxRate'   => $this->toApiFloat($taxRate),
+            'discountPercentage' => 0,
+            'unitPriceIncVat' => -$this->toApiFloat($discountIncVat),
+            'totalAmount'    => -$this->toApiFloat($discountIncVat),
+            'totalVatAmount' => -$this->toApiFloat($taxAmount),
         ];
     }
+
 
     private function prepareShippingItem($quote)
     {
         $shippingAddress = $quote->getShippingAddress();
-    
+
         if (!$shippingAddress || !$shippingAddress->getShippingAmount()) {
             return null;
         }
-    
-        $shippingTaxPercent = $shippingAddress->getShippingTaxPercent();
-        if ($shippingTaxPercent == 0) {
-            $shippingTaxPercent = $this->calculateShippingTaxPercent($shippingAddress);
+
+        $shippingExVat  = $shippingAddress->getShippingAmount();
+        $shippingIncVat = $shippingAddress->getShippingInclTax();
+        $shippingTax    = $shippingAddress->getShippingTaxAmount();
+
+        $taxPercent = $shippingAddress->getShippingTaxPercent();
+        if ($taxPercent == 0 && $shippingExVat > 0) {
+            $taxPercent = ($shippingTax / $shippingExVat) * 100;
         }
-    
+
         return [
             'productType' => self::ITEM_TYPE_SHIPPING,
-            'reference' => 'shipping',
-            'name' => $shippingAddress->getShippingDescription(),
-            'quantity' => 1,
-            'quantityUnit' => 'pc',
-            'unitPrice' => $this->toApiFloat($shippingAddress->getShippingAmount()),
-            'taxRate' => $this->toApiFloat($shippingTaxPercent),
-            'discountPercentage' => 0
+            'reference'   => 'shipping',
+            'name'        => $shippingAddress->getShippingDescription(),
+            'quantity'    => 1,
+            'quantityUnit'=> 'pc',
+            'unitPrice' => $this->toApiFloat($shippingExVat),
+            'taxRate'   => $this->toApiFloat($taxPercent),
+            'discountPercentage' => 0,
+            'unitPriceIncVat' => $this->toApiFloat($shippingIncVat),
+            'totalAmount'    => $this->toApiFloat($shippingIncVat),
+            'totalVatAmount' => $this->toApiFloat($shippingTax),
         ];
     }
+
     
     private function calculateShippingTaxPercent($shippingAddress)
     {
