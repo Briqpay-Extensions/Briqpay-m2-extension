@@ -9,6 +9,7 @@ use Briqpay\Payments\Logger\Logger;
 use Magento\Framework\App\Request\InvalidRequestException;
 use Magento\Framework\App\CsrfAwareActionInterface;
 use Magento\Framework\App\RequestInterface;
+use Magento\Framework\Event\ManagerInterface;
 use Briqpay\Payments\Model\Utility\HandleWebhook;
 
 /**
@@ -32,6 +33,8 @@ class Index extends Action implements CsrfAwareActionInterface
      */
     protected $handleWebhook;
 
+    protected $eventManager;
+
     /**
      * Index constructor.
      *
@@ -44,11 +47,13 @@ class Index extends Action implements CsrfAwareActionInterface
         Context $context,
         JsonFactory $resultJsonFactory,
         Logger $logger,
+         ManagerInterface $eventManager,
         HandleWebhook $handleWebhook
     ) {
         parent::__construct($context);
         $this->resultJsonFactory = $resultJsonFactory;
         $this->logger = $logger;
+        $this->eventManager = $eventManager;
         $this->handleWebhook = $handleWebhook;
     }
 
@@ -107,6 +112,12 @@ class Index extends Action implements CsrfAwareActionInterface
 
             // Check if processing resulted in an error
             if (isset($result['status']) && !$result['status']) {
+                $this->eventManager->dispatch('briqpay_payment_module_webhook_error', [
+                    'session' => $data['sessionId'],
+                    'status' => $result['status'],
+                    'message' => $result['message'],
+                    'quote' => $data['quoteId']
+                 ]);
                 // Log the error message
                 $this->logger->error('Webhook processing failed with message: ' . $result['message']);
                 // Return 400 status code with the result payload
