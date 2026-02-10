@@ -15,9 +15,9 @@
     <!--  <event name="briqpay_payment_module_decision_prepare">
         <observer name="decision_observer" instance="Briqpay\Payments\Observer\Examples\DecisionObserverExample" />
     </event>  -->
-    <!-- <event name="briqpay_payment_module_webhook_error">
-        <observer name="webhook_error_observer" instance="Briqpay\Payments\Observer\Examples\WebhookErrorObserverExample" />
-    </event> -->
+        <!-- <event name="briqpay_payment_module_webhook_error">
+            <observer name="webhook_error_observer" instance="Briqpay\Payments\Observer\Examples\WebhookErrorObserverExample" />
+        </event> -->
         <event name="email_order_set_template_vars_before">
     <observer name="custom_payment_method_name" instance="Briqpay\Payments\Observer\CustomPaymentMethodName" />
     </event>
