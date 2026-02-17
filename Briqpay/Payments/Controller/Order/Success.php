@@ -1,16 +1,19 @@
 <?php
+
 namespace Briqpay\Payments\Controller\Order;
 
-use Magento\Framework\App\Action\Context;
-use Magento\Framework\App\Action\Action;
+use Briqpay\Payments\Logger\Logger;
+use Briqpay\Payments\Model\Utility\CreateOrder;
+use Exception;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Framework\App\Action\HttpGetActionInterface;
+use Magento\Framework\Controller\Result\RedirectFactory;
+use Magento\Framework\Message\ManagerInterface;
 use Magento\Framework\Session\SessionManagerInterface;
-use Briqpay\Payments\Model\Utility\CreateOrder;
 use Magento\Quote\Api\CartRepositoryInterface;
-use Briqpay\Payments\Logger\Logger;
 
-class Success extends Action
+class Success implements HttpGetActionInterface
 {
     protected $checkoutSession;
     protected $customerSession;
@@ -18,23 +21,28 @@ class Success extends Action
     protected $logger;
     protected $quoteRepository;
     protected $sessionManager;
+    private RedirectFactory $redirectFactory;
+    private ManagerInterface $messageManager;
 
     public function __construct(
-        Context $context,
         CheckoutSession $checkoutSession,
         CustomerSession $customerSession,
         CreateOrder $createOrder,
         Logger $logger,
         CartRepositoryInterface $quoteRepository,
-        SessionManagerInterface $sessionManager
-    ) {
+        SessionManagerInterface $sessionManager,
+        ManagerInterface $messageManager,
+        RedirectFactory $redirectFactory
+    )
+    {
         $this->checkoutSession = $checkoutSession;
         $this->customerSession = $customerSession;
         $this->createOrder = $createOrder;
         $this->logger = $logger;
         $this->quoteRepository = $quoteRepository;
         $this->sessionManager = $sessionManager;
-        parent::__construct($context);
+        $this->redirectFactory = $redirectFactory;
+        $this->messageManager = $messageManager;
     }
 
     public function execute()
@@ -42,10 +50,11 @@ class Success extends Action
         try {
             $this->createOrder->createOrder();
             // Redirect to the default order success page
-         
+
             $this->sessionManager->unsetData('briqpay_session_id');
-            return $this->_redirect('checkout/onepage/success');
-        } catch (\Exception $e) {
+
+            return $this->redirectFactory->create()->setPath('checkout/onepage/success');
+        } catch (Exception $e) {
             //Unset Briqpay sessionid on qoute
             $quote = $this->checkoutSession->getQuote();
             $quote->setData('briqpay_session_id', null);
@@ -54,7 +63,7 @@ class Success extends Action
             $this->sessionManager->unsetData('briqpay_session_id');
             $this->logger->critical($e->getMessage());
             $this->messageManager->addErrorMessage(__('Something went wrong while creating the order.'));
-            return $this->_redirect('checkout/onepage/failure');
+            return $this->redirectFactory->create()->setPath('checkout/onepage/failure');
         }
     }
 }
