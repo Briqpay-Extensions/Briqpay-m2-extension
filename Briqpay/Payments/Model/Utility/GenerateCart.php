@@ -248,7 +248,7 @@ class GenerateCart
 
         $discountIncVat = $discountAmt + $taxReduction;
 
-        if ($discountIncVat <= 0) {
+        if ($this->toApiFloat($discountIncVat) <= 0) {
             return null;
         }
 
