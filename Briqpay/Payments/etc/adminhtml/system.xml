@@ -69,6 +69,20 @@
                         <comment>Apply overlay around the Briqpay iFrame during purchase.</comment>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     </field>
+                    <field id="enable_terms" translate="label" type="select" sortOrder="140" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Enable Terms Module</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    </field>
+
+                    <field id="terms_list" translate="label" sortOrder="150" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Terms Configuration</label>
+                        <frontend_model>Briqpay\Payments\Block\Adminhtml\Form\Field\TermsList</frontend_model>
+                        <backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>
+                        <depends>
+                            <field id="enable_terms">1</field>
+                        </depends>
+                        <comment>Add different types of terms (Privacy, T&amp;C, etc.)</comment>
+                    </field>                   
                 </group>
             </group>
         </section>

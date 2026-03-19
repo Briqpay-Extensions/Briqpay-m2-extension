@@ -153,7 +153,6 @@ class CreateOrder
             $secondaryReference = $transactions[0]['secondaryReservationId'] ?? '';
             $underlyingPspName = $pspMetaData['description'] ?? '';
 
-
             // Initialize variables for business-specific data
             $companyCin = null;
             $companyName = null;
@@ -251,6 +250,29 @@ class CreateOrder
             if (isset($extraDataStrongAuth)) {
                 $order->setData('briqpay_strong_auth', $extraDataStrongAuth);
             }
+
+            $terms = $session['data']['terms'] ?? [];
+
+            if (!empty($terms)) {
+                $termsDataForDb = [];
+                foreach ($terms as $key => $termData) {
+                    /**
+                     * We store the result as an associative array where the 'key' 
+                     * matches the 'Key Name' defined in your admin settings.
+                     */
+                    $termsDataForDb[$key] = [
+                        'value'  => (isset($termData['value']) && $termData['value'] === true),
+                        'header' => $termData['header'] ?? $key
+                    ];
+
+                    // Developer-friendly: Also set individual keys in payment additional information
+                    // This allows checking $payment->getAdditionalInformation('briqpay_newsLetters')
+                    $order->getPayment()->setAdditionalInformation($key, $termData['value'] ? 1 : 0);
+                }
+
+                // Save the full JSON blob to the new column you just created
+                $order->setData('briqpay_accepted_terms', json_encode($termsDataForDb));
+            }            
 
             // Save order
             $order->save();

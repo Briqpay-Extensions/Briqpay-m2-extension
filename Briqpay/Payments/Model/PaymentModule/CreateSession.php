@@ -14,7 +14,7 @@ use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Framework\Event\ManagerInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Framework\UrlInterface; // Import UrlInterface
+use Magento\Framework\UrlInterface;
 
 class CreateSession
 {
@@ -28,7 +28,7 @@ class CreateSession
     protected $checkoutSession;
     protected $quoteRepository;
     protected $eventManager;
-    protected $urlBuilder; // Add UrlBuilder property
+    protected $urlBuilder;
     private $scopeConfig;
     protected $scopeHelper;
 
@@ -44,7 +44,7 @@ class CreateSession
         CartRepositoryInterface $quoteRepository,
         ManagerInterface $eventManager,
         ScopeConfigInterface $scopeConfig,
-        UrlInterface $urlBuilder, // Add UrlBuilder to constructor
+        UrlInterface $urlBuilder,
         ScopeHelper $scopeHelper
     ) {
         $this->setupConfig = $setupConfig;
@@ -58,8 +58,58 @@ class CreateSession
         $this->quoteRepository = $quoteRepository;
         $this->eventManager = $eventManager;
         $this->scopeConfig = $scopeConfig;
-        $this->urlBuilder = $urlBuilder; // Initialize UrlBuilder
+        $this->urlBuilder = $urlBuilder;
         $this->scopeHelper = $scopeHelper;
+    }
+
+    /**
+     * Logic to build the Terms Module configuration
+     *
+     * @return array|null
+     */
+    private function getTermsModuleConfig()
+    {
+        $enabled = $this->scopeHelper->getScopedConfigValue(
+            'payment/briqpay/advanced/enable_terms',
+            ScopeInterface::SCOPE_STORE
+        );
+
+        if (!$enabled) {
+            return null;
+        }
+
+        $termsJson = $this->scopeHelper->getScopedConfigValue(
+            'payment/briqpay/advanced/terms_list',
+            ScopeInterface::SCOPE_STORE
+        );
+
+        if (!$termsJson) {
+            return null;
+        }
+
+        $termsData = json_decode($termsJson, true);
+        if (!is_array($termsData) || empty($termsData)) {
+            return null;
+        }
+
+        $checkboxes = [];
+        foreach ($termsData as $row) {
+            if (empty($row['content'])) {
+                continue;
+            }
+
+            // Use the "name" field if provided, otherwise fallback to a sanitized version of the label
+            $key = !empty($row['name']) ? $row['name'] : 'term_' . bin2hex(random_bytes(2));
+
+            $checkboxes[] = [
+                'key'      => $key,
+                'label'    => $row['content'],
+                'required' => isset($row['is_required']) && $row['is_required'] == '1',
+                'default'  => isset($row['is_default']) && $row['is_default'] == '1'
+            ];
+        }
+
+        return !empty($checkboxes) ? ['checkboxes' => $checkboxes] : null;
     }
 
     public function getPaymentModule($fallbackEmail = null)
@@ -71,7 +121,6 @@ class CreateSession
             $shippingData = $this->shippingData->getShippingData($fallbackEmail);
             $quoteId = $this->checkoutSession->getQuoteId();
             
-            // Fetch the quote object using the quote ID
             $quote = $this->quoteRepository->get($quoteId);
         } catch (\Exception $e) {
             $this->logger->error('Failed setting up config for session: ' . $e->getMessage(), [
@@ -81,13 +130,26 @@ class CreateSession
         }
 
         $uri = '/v3/session';
-
         $amountIncVat = $this->cart->getTotalAmount();
         $amountExVat = $this->cart->getTotalExAmount();
+        $webhookBaseUrl = $this->urlBuilder->getUrl('briqpay/webhooks');
 
-       
-        // Generate webhook URLs dynamically using the Magento base URL
-        $webhookBaseUrl = $this->urlBuilder->getUrl('briqpay/webhooks'); // Assuming 'briqpay/webhook' is the route for your webhooks
+        // Initial Module Setup
+        $loadModules = ['payment'];
+        $modulesConfig = [
+            "payment" => [
+                "decision" => [
+                    "enabled" => true
+                ]
+            ]
+        ];
+
+        // Add Terms Module if configured
+        $termsModuleData = $this->getTermsModuleConfig();
+        if ($termsModuleData) {
+            $loadModules[] = 'terms';
+            $modulesConfig['terms'] = $termsModuleData;
+        }
 
         $body = [
             'country' => $config['country'],
@@ -123,7 +185,7 @@ class CreateSession
                         'order_approved_not_captured'
                     ],
                     'method' => 'POST',
-                    'url' => $webhookBaseUrl // Use dynamic URL
+                    'url' => $webhookBaseUrl
                 ],
                 [
                     'eventType' => 'capture_status',
@@ -133,46 +195,32 @@ class CreateSession
                         'approved'
                     ],
                     'method' => 'POST',
-                    'url' => $webhookBaseUrl . 'capture' // Use dynamic URL
+                    'url' => $webhookBaseUrl . 'capture'
                 ]
             ],
             'modules' => [
-                "loadModules" => [
-                    'payment'
-                ],
-                "config" => [
-                    "payment" => [
-                        "decision" => [
-                            "enabled" => true
-                        ]
-                    ]
-                ]
+                "loadModules" => $loadModules,
+                "config" => $modulesConfig
             ]
         ];
 
-        // Log the body before dispatching the event
         $this->logger->debug('Body before dispatch:', $body);
 
-        // Dispatch event to allow modifications
         $this->eventManager->dispatch('briqpay_payment_module_body_prepare', [
-            'body' => &$body, // Passing by reference
+            'body' => &$body,
             'config' => $config,
             'quote' => $quote
         ]);
 
-        // Log the body after dispatching the event
-        $this->logger->debug('Body after dispatch:', $body);
-
         if ($this->scopeHelper->getScopedConfigValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
             $body = $this->rounding->roundCart($body);
         }
-        // Log the body before making the request
+
         $this->logger->debug('Final body before request to ApiClient:', $body);
 
         try {
             $response = $this->apiClient->request('POST', $uri, $body);
 
-            // Ensure the quote object is available before using it
             if ($quote) {
                 $quote->setData('briqpay_session_id', $response['sessionId']);
                 $this->quoteRepository->save($quote);

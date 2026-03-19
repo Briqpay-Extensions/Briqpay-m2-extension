@@ -109,7 +109,7 @@ class AsyncCreateOrder
             $transactions = $sessionData['data']['transactions'] ?? [];
             $pspMetaData = $sessionData['data']['pspMetadata'] ?? [];
             $pspDisplayName = !empty($transactions) ? $transactions[0]['pspDisplayName'] : '';
-            $quote->setData('briqpay_psp_display_name', $pspDisplayName);
+            $quote->setData('briqpay_psp_display_name', $pspDisplayName); 
 
             // Collect totals and save quote
             $quote->collectTotals()->save();
@@ -120,6 +120,29 @@ class AsyncCreateOrder
             if (!$order || !$order->getId()) {
                 throw new LocalizedException(__('Order could not be created.'));
             }
+
+            $terms = $sessionData['data']['terms'] ?? [];
+
+            if (!empty($terms)) {
+                $termsDataForDb = [];
+                foreach ($terms as $key => $termData) {
+                    /**
+                     * We store the result as an associative array where the 'key' 
+                     * matches the 'Key Name' defined in your admin settings.
+                     */
+                    $termsDataForDb[$key] = [
+                        'value'  => (isset($termData['value']) && $termData['value'] === true),
+                        'header' => $termData['header'] ?? $key
+                    ];
+
+                    // Developer-friendly: Also set individual keys in payment additional information
+                    // This allows checking $payment->getAdditionalInformation('briqpay_newsLetters')
+                    $order->getPayment()->setAdditionalInformation($key, $termData['value'] ? 1 : 0);
+                }
+
+                // Save the full JSON blob to the new column you just created
+                $order->setData('briqpay_accepted_terms', json_encode($termsDataForDb));
+            } 
 
             // At this point, the order has been created successfully.
             $this->logger->info('Order created successfully with order ID: ' . $order->getId());
