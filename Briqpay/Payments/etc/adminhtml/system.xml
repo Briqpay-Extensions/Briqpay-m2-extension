@@ -59,8 +59,8 @@
                     </field> 
                     
                     <field id="strict_rounding" translate="label comment" sortOrder="120" type="select" showInDefault="1" showInWebsite="1" showInStore="1">
-                        <label>Strict rounding</label>
-                        <comment>Apply strict rounding by adding a rounding adjustment line to ensure that the total of line items matches the total amount exactly.</comment>
+                        <label>Strict rounding (deprecated)</label>
+                        <comment>No longer used. As of 1.2.0 every cart is always reconciled with a rounding line, so this setting has no effect and will be removed in a future release.</comment>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     </field>
 

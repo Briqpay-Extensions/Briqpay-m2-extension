@@ -2,21 +2,24 @@
 
 namespace Briqpay\Payments\Model\OrderManagement;
 
-use Briqpay\Payments\Model\Config\SetupConfig;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
 use Magento\Sales\Model\Order\Invoice;
-use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Framework\Exception\LocalizedException;
-use Magento\Store\Model\StoreManagerInterface;
 use Magento\Weee\Helper\Data as WeeeHelper;
+use Briqpay\Payments\Model\Utility\Money\CartLine;
+use Briqpay\Payments\Model\Utility\Money\CartBalancer;
+use Briqpay\Payments\Model\Utility\Money\MinorUnits;
+use Briqpay\Payments\Model\PaymentModule\ReadSession;
 
 class CaptureOrder
 {
     private $apiClient;
     private $logger;
-    private $storeManager;
     private $weeeHelper;
+    private $cartLine;
+    private $cartBalancer;
+    private $readSession;
 
     const ITEM_TYPE_SHIPPING = 'shipping_fee';
     const DEFAULT_QUANTITY_UNIT = 'pc';
@@ -24,13 +27,17 @@ class CaptureOrder
     public function __construct(
         ApiClient $apiClient,
         Logger $logger,
-        StoreManagerInterface $storeManager,
-        WeeeHelper $weeeHelper
+        WeeeHelper $weeeHelper,
+        CartLine $cartLine,
+        CartBalancer $cartBalancer,
+        ReadSession $readSession
     ) {
         $this->apiClient = $apiClient;
         $this->logger = $logger;
-        $this->storeManager = $storeManager;
         $this->weeeHelper = $weeeHelper;
+        $this->cartLine = $cartLine;
+        $this->cartBalancer = $cartBalancer;
+        $this->readSession = $readSession;
     }
 
     public function capture($order, $captureCart, $captureAmount)
@@ -42,8 +49,8 @@ class CaptureOrder
             throw new LocalizedException(__('Briqpay session ID is missing from order.'));
         }
 
-        // 1. Prepare items with strict math calculation
-        $cartItems = $this->prepareCartItems($captureCart, $order);
+        // 1. Prepare items (+ WEEE surcharges) with strict math calculation
+        $cartItems = $this->prepareCartItems($captureCart);
 
         // 2. Add Discounts
         $discountItems = $this->prepareDiscountItems($captureCart);
@@ -61,25 +68,27 @@ class CaptureOrder
         }
 
         if (!$shippingAlreadyCaptured && (float)$order->getShippingInclTax() > 0) {
-            $shippingItem = $this->prepareShippingItem($order);
+            $shippingItem = $this->prepareShippingItem($order, $briqpaySessionId);
             if ($shippingItem) $cartItems[] = $shippingItem;
         }
 
-        // 4. CALCULATE TOTALS FROM CART ARRAY (Guarantees Briqpay validation passes)
-        $totalIncVat = 0;
-        $totalExVat = 0;
-        foreach ($cartItems as $ci) {
-            $totalIncVat += $ci['totalAmount'];
-            $totalExVat  += ($ci['unitPrice'] * $ci['quantity']);
-        }
+        // 4. Reconcile against the invoice amount Magento is actually charging - never
+        //    re-summed from the lines, so a capture can never drift from or exceed the
+        //    authorised amount, and any per-line rounding is settled on one line here.
+        // allowFold=false: a capture must never fold its own rounding remainder into
+        // shipping/discount - Briqpay validates those references' unitPrice against
+        // what checkout already committed, and a capture-side fold almost never
+        // reproduces that same value. See CartBalancer's docblock.
+        $targetIncVat = MinorUnits::fromFloat($captureAmount);
+        $balanced = $this->cartBalancer->balance($cartItems, $targetIncVat, false);
 
         $body = [
             'data' => [
                 'order' => [
                     'currency' => $order->getOrderCurrencyCode(),
-                    'amountIncVat' => (int)$totalIncVat,
-                    'amountExVat' => (int)$totalExVat,
-                    'cart' => $cartItems
+                    'amountIncVat' => $balanced['amountIncVat'],
+                    'amountExVat' => $balanced['amountExVat'],
+                    'cart' => $balanced['cart']
                 ]
             ]
         ];
@@ -92,98 +101,152 @@ class CaptureOrder
         }
     }
 
-    private function prepareCartItems($captureCart, $order): array
+    private function prepareCartItems($captureCart): array
     {
         $cartItems = [];
         foreach ($captureCart as $item) {
             // FALLBACK: Try getQty() first (Invoice), then getQuantity() (Quote/Other)
-            $qty = $item->getQty() ?: $item->getQuantity();
-            $qty = (float)$qty;
-
+            $qty = (float)($item->getQty() ?: $item->getQuantity());
             if ($qty <= 0) continue;
 
             // Determine if shipping placeholder
             $type = method_exists($item, 'getProductType') ? $item->getProductType() : '';
             if ($type === 'shipping') continue;
 
-            $taxPercent = (float)$item->getTaxPercent();
-            $uPriceEx = $this->toApiFloat($item->getPrice());
-            $uPriceInc = $this->toApiFloat($item->getPrice() * (1 + $taxPercent / 100));
+            // The order item's own row total/qty are constant for the whole order, so
+            // they are the correct base to prorate this partial capture against.
+            $orderedQty = (float)$item->getQtyOrdered();
+            if ($orderedQty <= 0) continue;
 
-            // MANDATORY: Recalculate totals based on the partial Qty to satisfy Briqpay validation
-            $lineTotalInc = (int)round($uPriceInc * $qty);
-            $lineTotalEx  = (int)round($uPriceEx * $qty);
+            $taxRateBp = MinorUnits::fromFloat($item->getTaxPercent());
+            $orderRowIncVatMinor = MinorUnits::fromFloat($item->getRowTotalInclTax());
+            $capturedRowIncVatMinor = MinorUnits::divRound($orderRowIncVatMinor * $qty, $orderedQty);
 
-            $cartItems[] = [
-                'productType' => in_array($type, ['virtual', 'downloadable']) ? 'digital' : 'physical',
-                'reference' => substr($item->getSku(), 0, 64),
-                'name' => $item->getName(),
-                'quantity' => (int)$qty,
-                'quantityUnit' => self::DEFAULT_QUANTITY_UNIT,
-                'unitPrice' => $uPriceEx,
-                'taxRate' => (int)round($taxPercent * 100),
-                'discountPercentage' => 0,
-                'unitPriceIncVat' => $uPriceInc,
-                'totalAmount' => $lineTotalInc,
-                'totalVatAmount' => $lineTotalInc - $lineTotalEx
-            ];
+            $cartItems[] = $this->cartLine->build(
+                $capturedRowIncVatMinor,
+                $qty,
+                $taxRateBp,
+                in_array($type, ['virtual', 'downloadable']) ? 'digital' : 'physical',
+                substr($item->getSku(), 0, 64),
+                $item->getName()
+            );
+
+            if ($this->weeeHelper->isEnabled()) {
+                $orderWeeeIncVat = (float)$this->weeeHelper->getWeeeTaxAppliedAmount($item);
+                if ($orderWeeeIncVat > 0) {
+                    $weeTaxRateBp = $this->weeeHelper->isTaxable() ? $taxRateBp : 0;
+                    $capturedWeeeMinor = MinorUnits::divRound(
+                        MinorUnits::fromFloat($orderWeeeIncVat) * $qty,
+                        $orderedQty
+                    );
+
+                    $cartItems[] = $this->cartLine->build(
+                        $capturedWeeeMinor,
+                        $qty,
+                        $weeTaxRateBp,
+                        'surcharge',
+                        substr($item->getSku(), 0, 64) . '_weee',
+                        'WEEE Tax: ' . $item->getName()
+                    );
+                }
+            }
         }
         return $cartItems;
     }
 
-    private function prepareShippingItem($order): array
+    /**
+     * Shipping is captured exactly once across the whole order lifecycle, and Briqpay
+     * validates that a later capture's "shipping" line matches the unitPrice it already
+     * has on file from checkout - which can differ from Magento's own nominal shipping
+     * field if checkout folded a rounding remainder into it (see CartBalancer). So this
+     * echoes back the exact line Briqpay itself returns for the session, rather than
+     * recomputing shipping fresh from Magento's order fields, which is what causes a
+     * real "has mismatching unitPrice" rejection from Briqpay's capture endpoint.
+     * Falls back to recomputing only if the session can't be read.
+     */
+    private function prepareShippingItem($order, string $briqpaySessionId): array
     {
+        $sessionLine = $this->findSessionCartLine($briqpaySessionId, self::ITEM_TYPE_SHIPPING);
+        if ($sessionLine !== null) {
+            return $sessionLine;
+        }
+
         $shippingEx = (float)$order->getShippingAmount();
         $shippingInc = (float)$order->getShippingInclTax();
-        $taxRate = $shippingEx > 0 ? (($shippingInc - $shippingEx) / $shippingEx) * 100 : 0;
+        $taxRateBp = $shippingEx > 0
+            ? MinorUnits::round((($shippingInc - $shippingEx) / $shippingEx) * 10000)
+            : 0;
 
-        return [
-            'productType' => self::ITEM_TYPE_SHIPPING,
-            'reference' => 'shipping',
-            'name' => $order->getShippingDescription() ?: 'Shipping',
-            'quantity' => 1,
-            'quantityUnit' => self::DEFAULT_QUANTITY_UNIT,
-            'unitPrice' => $this->toApiFloat($shippingEx),
-            'taxRate' => (int)round($taxRate * 100),
-            'discountPercentage' => 0,
-            'unitPriceIncVat' => $this->toApiFloat($shippingInc),
-            'totalAmount' => $this->toApiFloat($shippingInc),
-            'totalVatAmount' => $this->toApiFloat($shippingInc - $shippingEx)
-        ];
+        return $this->cartLine->build(
+            MinorUnits::fromFloat($shippingInc),
+            1,
+            $taxRateBp,
+            self::ITEM_TYPE_SHIPPING,
+            'shipping',
+            $order->getShippingDescription() ?: 'Shipping'
+        );
+    }
+
+    /**
+     * Looks up a line by productType in the session Briqpay currently has on record.
+     * Returns null (rather than throwing) on any failure, so a transient read issue
+     * falls back to recomputing instead of blocking the capture outright.
+     */
+    private function findSessionCartLine(string $sessionId, string $productType): ?array
+    {
+        try {
+            $session = $this->readSession->getSession($sessionId);
+            $cart = $session['data']['order']['cart'] ?? [];
+            foreach ($cart as $line) {
+                if (($line['productType'] ?? null) === $productType) {
+                    return $line;
+                }
+            }
+        } catch (\Exception $e) {
+            $this->logger->error(
+                'CaptureOrder: could not read back session to reuse its ' . $productType
+                . ' line, falling back to a recomputed one: ' . $e->getMessage()
+            );
+        }
+        return null;
     }
 
     private function prepareDiscountItems($captureCart): array
     {
         $discounts = [];
         foreach ($captureCart as $item) {
-            $qty = $item->getQty() ?: $item->getQuantity();
-            $discountAmt = (float)$item->getDiscountAmount();
-            
-            if ($qty <= 0 || $discountAmt <= 0) continue;
+            $qty = (float)($item->getQty() ?: $item->getQuantity());
+            $orderedQty = (float)$item->getQtyOrdered();
+            if ($qty <= 0 || $orderedQty <= 0) continue;
 
-            $taxPercent = (float)$item->getTaxPercent();
-            $uDiscountInc = $this->toApiFloat($discountAmt / $qty);
-            $uDiscountEx = (int)round($uDiscountInc / (1 + $taxPercent / 100));
+            // discount_amount is excl. VAT; add the tax compensation Magento tracks
+            // separately to get the incl.-VAT discount, then prorate it the same way
+            // as the row total above - getDiscountAmount() is the discount for the
+            // full ordered quantity, not a per-unit figure.
+            $discountExVatOrdered = (float)$item->getDiscountAmount();
+            $discountTaxCompOrdered = method_exists($item, 'getDiscountTaxCompensationAmount')
+                ? (float)$item->getDiscountTaxCompensationAmount()
+                : 0.0;
+            $discountIncVatOrdered = $discountExVatOrdered + $discountTaxCompOrdered;
+            if ($discountIncVatOrdered <= 0) continue;
 
-            $discounts[] = [
-                'productType' => 'discount',
-                'reference' => substr($item->getSku(), 0, 64) . '_discount',
-                'name' => 'Discount: ' . $item->getName(),
-                'quantity' => (int)$qty,
-                'quantityUnit' => self::DEFAULT_QUANTITY_UNIT,
-                'unitPrice' => -$uDiscountEx,
-                'taxRate' => (int)round($taxPercent * 100),
-                'discountPercentage' => 0,
-                'unitPriceIncVat' => -$uDiscountInc,
-                'totalAmount' => -(int)round($uDiscountInc * $qty),
-                'totalVatAmount' => -(int)round(($uDiscountInc - $uDiscountEx) * $qty)
-            ];
+            $discountIncVatMinor = MinorUnits::divRound(
+                MinorUnits::fromFloat($discountIncVatOrdered) * $qty,
+                $orderedQty
+            );
+            if ($discountIncVatMinor <= 0) continue;
+
+            $taxRateBp = MinorUnits::fromFloat($item->getTaxPercent());
+
+            $discounts[] = $this->cartLine->build(
+                -$discountIncVatMinor,
+                1,
+                $taxRateBp,
+                'discount',
+                substr($item->getSku(), 0, 64) . '_discount',
+                'Discount: ' . $item->getName()
+            );
         }
         return $discounts;
-    }
-
-    private function toApiFloat($val): int
-    {
-        return (int)round((float)$val * 100);
     }
 }

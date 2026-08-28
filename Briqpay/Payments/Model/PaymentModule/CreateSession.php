@@ -7,7 +7,6 @@ use Briqpay\Payments\Model\Utility\AssignBillingAddress;
 use Briqpay\Payments\Model\Utility\AssignShippingAddress;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
-use Briqpay\Payments\Model\Utility\RoundingHelper;
 use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Api\CartRepositoryInterface;
@@ -22,7 +21,6 @@ class CreateSession
     protected $cart;
     protected $billingData;
     protected $shippingData;
-    protected $rounding;
     protected $apiClient;
     protected $logger;
     protected $checkoutSession;
@@ -38,7 +36,6 @@ class CreateSession
         GenerateCart $cart,
         AssignBillingAddress $billingData,
         AssignShippingAddress $shippingData,
-        RoundingHelper $rounding,
         Logger $logger,
         CheckoutSession $checkoutSession,
         CartRepositoryInterface $quoteRepository,
@@ -52,7 +49,6 @@ class CreateSession
         $this->cart = $cart;
         $this->billingData = $billingData;
         $this->shippingData = $shippingData;
-        $this->rounding = $rounding;
         $this->logger = $logger;
         $this->checkoutSession = $checkoutSession;
         $this->quoteRepository = $quoteRepository;
@@ -116,11 +112,11 @@ class CreateSession
     {
         try {
             $config = $this->setupConfig->getSetupConfig();
-            $cart = $this->cart->getCart();
+            $cartData = $this->cart->getCartData();
             $billingData = $this->billingData->getBillingData($fallbackEmail);
             $shippingData = $this->shippingData->getShippingData($fallbackEmail);
             $quoteId = $this->checkoutSession->getQuoteId();
-            
+
             $quote = $this->quoteRepository->get($quoteId);
         } catch (\Exception $e) {
             $this->logger->error('Failed setting up config for session: ' . $e->getMessage(), [
@@ -130,8 +126,9 @@ class CreateSession
         }
 
         $uri = '/v3/session';
-        $amountIncVat = $this->cart->getTotalAmount();
-        $amountExVat = $this->cart->getTotalExAmount();
+        $cart = $cartData['cart'];
+        $amountIncVat = $cartData['amountIncVat'];
+        $amountExVat = $cartData['amountExVat'];
         $webhookBaseUrl = $this->urlBuilder->getUrl('briqpay/webhooks');
 
         // Initial Module Setup
@@ -212,9 +209,8 @@ class CreateSession
             'quote' => $quote
         ]);
 
-        if ($this->scopeHelper->getScopedConfigValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
-            $body = $this->rounding->roundCart($body);
-        }
+        // Rounding is now settled unconditionally as part of $cartData - strict_rounding
+        // is kept as a no-op config field for one release, then removed.
 
         $this->logger->debug('Final body before request to ApiClient:', $body);
 

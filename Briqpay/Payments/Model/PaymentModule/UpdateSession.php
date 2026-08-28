@@ -6,13 +6,10 @@ use Briqpay\Payments\Model\Config\SetupConfig;
 use Briqpay\Payments\Model\Utility\GenerateCart;
 use Briqpay\Payments\Model\Utility\AssignBillingAddress;
 use Briqpay\Payments\Model\Utility\AssignShippingAddress;
-use Briqpay\Payments\Model\Utility\RoundingHelper;
 use Briqpay\Payments\Rest\ApiClient;
 use Briqpay\Payments\Logger\Logger;
-use Briqpay\Payments\Model\Utility\ScopeHelper;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Api\CartRepositoryInterface;
-use Magento\Store\Model\ScopeInterface;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Event\ManagerInterface;
 
@@ -51,9 +48,7 @@ class UpdateSession
     protected $eventManager;
     protected $checkoutSession;
     protected $quoteRepository;
-    protected $rounding;
     private $scopeConfig;
-    protected $scopeHelper;
 
     /**
      * UpdateSession constructor.
@@ -71,13 +66,11 @@ class UpdateSession
         GenerateCart $cart,
         AssignBillingAddress $billingData,
         AssignShippingAddress $shippingData,
-        RoundingHelper $rounding,
         CheckoutSession $checkoutSession,
         CartRepositoryInterface $quoteRepository,
         Logger $logger,
         ScopeConfigInterface $scopeConfig,
-        ManagerInterface $eventManager,
-        ScopeHelper $scopeHelper,
+        ManagerInterface $eventManager
     ) {
         $this->setupConfig = $setupConfig;
         $this->apiClient = $apiClient;
@@ -86,11 +79,9 @@ class UpdateSession
         $this->quoteRepository = $quoteRepository;
         $this->billingData = $billingData;
         $this->shippingData = $shippingData;
-        $this->rounding = $rounding;
         $this->eventManager = $eventManager;
         $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
-        $this->scopeHelper = $scopeHelper;
     }
 
     /**
@@ -104,19 +95,19 @@ class UpdateSession
     {
         try {
             $config = $this->setupConfig->getSetupConfig();
-            $cartItems = $this->cart->getCart();
+            $cartData = $this->cart->getCartData();
             $billingData = $this->billingData->getBillingData($fallbackEmail);
             $shippingData = $this->shippingData->getShippingData($fallbackEmail);
-       
+
             $uri = '/v3/session/' . $sessionId;
-       
+
             $body = [
             'data' => [
                 'order' => [
                     'currency' => $config['currency'],
-                    'amountIncVat' => $this->cart->getTotalAmount(),
-                    'amountExVat' => $this->cart->getTotalExAmount(),
-                    'cart' => $cartItems
+                    'amountIncVat' => $cartData['amountIncVat'],
+                    'amountExVat' => $cartData['amountExVat'],
+                    'cart' => $cartData['cart']
                 ],
                 'billing' => $billingData,
                 'shipping' => $shippingData
@@ -140,10 +131,9 @@ class UpdateSession
             throw new \Exception('Error dispatching event session', 0, $e);
         }
 
-        if ($this->scopeHelper->getScopedConfigValue('payment/briqpay/advanced/strict_rounding', ScopeInterface::SCOPE_STORE)) {
-            $body = $this->rounding->roundCart($body);
-        }
-        
+        // Rounding is now settled unconditionally as part of $cartData - strict_rounding
+        // is kept as a no-op config field for one release, then removed.
+
         try {
             $response = $this->apiClient->request('PATCH', $uri, $body);
             return $response;

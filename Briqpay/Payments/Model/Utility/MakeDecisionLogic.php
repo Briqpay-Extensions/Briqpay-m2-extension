@@ -106,19 +106,29 @@ class MakeDecisionLogic
             // Compare with existing session data
             $billingDataChanged = $this->compareData->compareData($sessionData['billing'] ?? [], $billingData);
             $shippingDataChanged = $this->compareData->compareData($sessionData['shipping'] ?? [], $shippingData);
-            $cartTotalCompare = !$this->compareData->doesTotalsMatch($sessionData['order']['amountIncVat'] ?? [], (int) round($quote->getGrandTotal() * 100, 0));
-    
+            $sessionAmountIncVat = (int) ($sessionData['order']['amountIncVat'] ?? 0);
+            $quoteAmountIncVat = (int) round($quote->getGrandTotal() * 100, 0);
+            $cartTotalCompare = !$this->compareData->doesTotalsMatch($sessionAmountIncVat, $quoteAmountIncVat);
+
             // Log the results of the comparisons
             if ($billingDataChanged) {
                 $validationErrors[] = 'Billing data has changed.';
             }
-    
+
             if ($shippingDataChanged) {
                 $validationErrors[] = 'Shipping data has changed.';
             }
-    
+
             if ($cartTotalCompare) {
-                $validationErrors[] = 'Cart totals do not match.';
+                // Name both sides here, not just downstream in the log call: this is the
+                // string that actually reaches the log, and a bare "do not match" gives
+                // no way to tell whether the session is stale or the cart itself is wrong.
+                $validationErrors[] = sprintf(
+                    'Cart totals do not match. session.amountIncVat=%d quote.grandTotal(minor)=%d diff=%d',
+                    $sessionAmountIncVat,
+                    $quoteAmountIncVat,
+                    $quoteAmountIncVat - $sessionAmountIncVat
+                );
             }
     
             // Fire event to allow other modules to affect the decision
