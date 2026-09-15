@@ -65,15 +65,33 @@ class HandleWebhook
             $session = $this->readSession->getSession($sessionId);
 
             if (!isset($session['status']) || $session['status'] !== 'completed') {
-                $this->logger->info('Session status is not completed.');
+                // A real, no-op-intended bail (Briqpay hasn't finished processing this
+                // session yet) is normal for order_pending. But for a later status like
+                // order_approved_not_captured or captured_full/partial, this returning
+                // 200 OK while silently doing nothing is exactly what looks like "the
+                // webhook was received and handled but the order never updated, with no
+                // error anywhere" - so it's logged at warning with full context, not info.
+                $this->logger->warning('HandleWebhook: session status is not "completed" - order status update skipped.', [
+                    'quoteId' => $quoteId,
+                    'sessionId' => $sessionId,
+                    'event' => $event,
+                    'sessionStatus' => $session['status'] ?? null,
+                ]);
                 return ['status' => true];
             }
-           
 
             // Ensure quote session matches
             $quoteSession = $quote->getData('briqpay_session_id');
             if ($quoteSession !== $sessionId) {
-                $this->logger->info('Quote session ID does not match session ID.Quote session ID: ' . $quoteSession.' Session ID: ' . $sessionId);
+                // Same reasoning as above: silently skipping here on a mismatch is
+                // indistinguishable from success unless logged loudly with the actual
+                // values, which is what made this class of bug invisible before.
+                $this->logger->warning('HandleWebhook: quote\'s stored briqpay_session_id does not match the webhook\'s sessionId - order status update skipped.', [
+                    'quoteId' => $quoteId,
+                    'quoteSessionId' => $quoteSession,
+                    'webhookSessionId' => $sessionId,
+                    'event' => $event,
+                ]);
                 return ['status' => true];
             }
 
@@ -86,6 +104,7 @@ class HandleWebhook
                 switch ($orderStatus) {
                     case 'order_approved_not_captured':
                     case 'captured_full':
+                    case 'captured_partial':
                     case 'order_pending':
                     case 'order_rejected':
                         $this->handleOrderStatus($quote, $orderStatus, $briqpaySessionStatus, $quoteId, $session);
@@ -122,6 +141,15 @@ class HandleWebhook
                 'status' => 'canceled',
             ],
             'captured_full' => [
+                'state' => Order::STATE_PROCESSING,
+                'status' => Order::STATE_PROCESSING,
+            ],
+            // Magento has no state distinct from "processing" for a partially captured
+            // order, so this mirrors captured_full. Missing this case (silently falling
+            // to the "Unknown order status" default, doing nothing) is what left orders
+            // stuck on their pre-capture status after a partial capture - see the
+            // remediation script for orders affected before this fix.
+            'captured_partial' => [
                 'state' => Order::STATE_PROCESSING,
                 'status' => Order::STATE_PROCESSING,
             ],

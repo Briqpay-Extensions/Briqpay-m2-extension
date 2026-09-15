@@ -28,7 +28,14 @@ class AsyncCreateOrder
     protected $scopeConfig;
     protected $scopeHelper;
 
-    // Define status mapping
+    // Define status mapping - kept in sync manually with
+    // HandleWebhook::handleOrderStatus()'s own $statusMappings, which is the other
+    // place a Briqpay order_status is translated to a Magento state. This one is used
+    // instead of that one specifically when the quote has no order yet, so an unmapped
+    // status here is worse than there: submit() below has already created and
+    // persisted the order by the time this map is checked, so a miss here throws
+    // AFTER the order exists, leaving it stuck in whatever default state submit() gave
+    // it rather than the correct one - not a silent no-op like the other file's gap.
     protected $statusMapping = [
         'order_pending' => [
             'state' => Order::STATE_NEW,
@@ -39,6 +46,10 @@ class AsyncCreateOrder
             'status' => Order::STATE_PROCESSING,
         ],
         'captured_full' => [
+            'state' => Order::STATE_PROCESSING,
+            'status' => Order::STATE_PROCESSING,
+        ],
+        'captured_partial' => [
             'state' => Order::STATE_PROCESSING,
             'status' => Order::STATE_PROCESSING,
         ],

@@ -264,7 +264,7 @@ class RefundOrder
      */
     private function prepareShippingItem(Creditmemo $creditmemo, string $briqpaySessionId)
     {
-        $sessionLine = $this->findSessionCartLine($briqpaySessionId, 'shipping_fee');
+        $sessionLine = $this->findSessionCartLine($briqpaySessionId, 'shipping');
         if ($sessionLine !== null) {
             $sessionLine['name'] = 'Shipping Refund';
             return $sessionLine;
@@ -287,23 +287,25 @@ class RefundOrder
     }
 
     /**
-     * Looks up a line by productType in the session Briqpay currently has on record.
-     * Returns null (rather than throwing) on any failure, so a transient read issue
-     * falls back to recomputing instead of blocking the refund outright.
+     * Looks up a line by reference (not productType - "surcharge" alone is ambiguous
+     * between a WEEE line, an "adjustment" line and a "rounding" line, but reference is
+     * unique for each) in the session Briqpay currently has on record. Returns null
+     * (rather than throwing) on any failure, so a transient read issue falls back to
+     * recomputing instead of blocking the refund outright.
      */
-    private function findSessionCartLine(string $sessionId, string $productType): ?array
+    private function findSessionCartLine(string $sessionId, string $reference): ?array
     {
         try {
             $session = $this->readSession->getSession($sessionId);
             $cart = $session['data']['order']['cart'] ?? [];
             foreach ($cart as $line) {
-                if (($line['productType'] ?? null) === $productType) {
+                if (($line['reference'] ?? null) === $reference) {
                     return $line;
                 }
             }
         } catch (\Exception $e) {
             $this->logger->error(
-                'RefundOrder: could not read back session to reuse its ' . $productType
+                'RefundOrder: could not read back session to reuse its ' . $reference
                 . ' line, falling back to a recomputed one: ' . $e->getMessage()
             );
         }

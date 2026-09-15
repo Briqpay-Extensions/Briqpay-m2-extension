@@ -176,10 +176,16 @@ class CreateSession
             'hooks' => [
                 [
                     'eventType' => 'order_status',
+                    // Every status HandleWebhook::handleOrderStatus() actually maps -
+                    // captured_full/captured_partial were missing here even though the
+                    // handler already coded for captured_full, which is exactly the kind
+                    // of drift that let captured_partial go completely unhandled.
                     'statuses' => [
                         'order_pending',
                         'order_rejected',
-                        'order_approved_not_captured'
+                        'order_approved_not_captured',
+                        'captured_full',
+                        'captured_partial'
                     ],
                     'method' => 'POST',
                     'url' => $webhookBaseUrl

@@ -72,6 +72,24 @@ class CaptureOrder
             if ($shippingItem) $cartItems[] = $shippingItem;
         }
 
+        // 3b. Settle any standalone "rounding" line from checkout (see CartBalancer -
+        // it appends one when no shipping/discount line was eligible to fold the
+        // remainder into). That amount is part of what Briqpay's session actually
+        // totals to, but CaptureOrder never rebuilds a line for it, so a capture that
+        // never includes it falls permanently short of the session's real total by
+        // that remainder - which can leave an order stuck at "partially captured"
+        // forever, never reaching "captured_full", even once every item and all
+        // shipping have been captured. Attached once, on the order's very first
+        // capture (no native invoice field tracks "was rounding already captured",
+        // unlike shipping's getShippingAmount(), so "no invoice exists yet" is the
+        // signal used here - mirrors shipping's own "attach once" handling).
+        if ($order->getInvoiceCollection()->getSize() === 0) {
+            $roundingItem = $this->findSessionCartLine($briqpaySessionId, 'rounding');
+            if ($roundingItem !== null) {
+                $cartItems[] = $roundingItem;
+            }
+        }
+
         // 4. Reconcile against the invoice amount Magento is actually charging - never
         //    re-summed from the lines, so a capture can never drift from or exceed the
         //    authorised amount, and any per-line rounding is settled on one line here.
@@ -166,7 +184,7 @@ class CaptureOrder
      */
     private function prepareShippingItem($order, string $briqpaySessionId): array
     {
-        $sessionLine = $this->findSessionCartLine($briqpaySessionId, self::ITEM_TYPE_SHIPPING);
+        $sessionLine = $this->findSessionCartLine($briqpaySessionId, 'shipping');
         if ($sessionLine !== null) {
             return $sessionLine;
         }
@@ -188,24 +206,26 @@ class CaptureOrder
     }
 
     /**
-     * Looks up a line by productType in the session Briqpay currently has on record.
-     * Returns null (rather than throwing) on any failure, so a transient read issue
-     * falls back to recomputing instead of blocking the capture outright.
+     * Looks up a line by reference (not productType - "surcharge" alone is ambiguous
+     * between a WEEE line, an "adjustment" line and a "rounding" line, but reference is
+     * unique for each) in the session Briqpay currently has on record. Returns null
+     * (rather than throwing) on any failure, so a transient read issue falls back to
+     * recomputing/omitting instead of blocking the capture outright.
      */
-    private function findSessionCartLine(string $sessionId, string $productType): ?array
+    private function findSessionCartLine(string $sessionId, string $reference): ?array
     {
         try {
             $session = $this->readSession->getSession($sessionId);
             $cart = $session['data']['order']['cart'] ?? [];
             foreach ($cart as $line) {
-                if (($line['productType'] ?? null) === $productType) {
+                if (($line['reference'] ?? null) === $reference) {
                     return $line;
                 }
             }
         } catch (\Exception $e) {
             $this->logger->error(
-                'CaptureOrder: could not read back session to reuse its ' . $productType
-                . ' line, falling back to a recomputed one: ' . $e->getMessage()
+                'CaptureOrder: could not read back session to reuse its ' . $reference
+                . ' line, falling back to a recomputed one (or omitting it): ' . $e->getMessage()
             );
         }
         return null;
