@@ -183,9 +183,7 @@ class CreateSession
                     'statuses' => [
                         'order_pending',
                         'order_rejected',
-                        'order_approved_not_captured',
-                        'captured_full',
-                        'captured_partial'
+                        'order_approved_not_captured'
                     ],
                     'method' => 'POST',
                     'url' => $webhookBaseUrl
