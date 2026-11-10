@@ -2,9 +2,9 @@
 
 namespace Briqpay\Payments\Model\Config\Source;
 
-use Magento\Framework\Option\ArrayInterface;
+use Magento\Framework\Data\OptionSourceInterface;
 
-class LogLevel implements ArrayInterface
+class LogLevel implements OptionSourceInterface
 {
     /**
      * Return an array of log levels

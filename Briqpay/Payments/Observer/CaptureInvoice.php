@@ -31,13 +31,9 @@ class CaptureInvoice implements ObserverInterface
             $invoice = $observer->getEvent()->getInvoice();
             $order = $invoice->getOrder();
 
-            if ($order->getPayment()->getMethod() == 'briqpay'&& !empty($invoice->getTransactionId())) {
-                // Calculate remaining amount to be captured
-                $remainingAmount = $invoice->getGrandTotal() - $invoice->getTotalPaid();
-
-                // Call capture method with $remainingAmount
-              //  $captureId=   $this->captureOrder->capture($invoice, $remainingAmount)["captureId"];
-
+            if ($order->getPayment()->getMethod() == 'briqpay' && !empty($invoice->getTransactionId())
+                && !$this->isRecorded((int) $invoice->getId())
+            ) {
                 foreach ($invoice->getAllItems() as $item) {
                     $customTable = $this->customTableFactory->create();
                     $quantity = $item->getQty();
@@ -58,5 +54,17 @@ class CaptureInvoice implements ObserverInterface
             $this->logger->error('General Exception in CaptureInvoice observer: ' . $e->getMessage());
             throw new LocalizedException(__('Error capturing invoice.'));
         }
+    }
+
+    /**
+     * Whether the invoice's capture is already recorded: the invoice is saved again
+     * later, for example when Briqpay confirms the capture, and must not be recorded twice.
+     */
+    private function isRecorded(int $invoiceId): bool
+    {
+        $collection = $this->customTableFactory->create()->getCollection();
+        $collection->addFieldToFilter('invoice_id', $invoiceId);
+
+        return $collection->getSize() > 0;
     }
 }

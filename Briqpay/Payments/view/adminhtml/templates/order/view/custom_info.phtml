@@ -1,31 +1,32 @@
 <?php /** @var \Briqpay\Payments\Block\Order\View\Custom $block */ ?>
+<?php /** @var \Magento\Framework\Escaper $escaper */ ?>
 <?php if ($block->hasBriqpayData()) : ?>
     <div class="transaction-info-container">
         <span class="title">Transaction Information</span>
 
         <?php if ($block->hasPspDisplayName()) : ?>
             <div>
-                <strong>PSP Name:</strong> <?php echo $block->getPspDisplayName(); ?>
+                <strong>PSP Name:</strong> <?= $escaper->escapeHtml((string) $block->getPspDisplayName()) ?>
             </div>
         <?php endif; ?>
 
         <?php if ($block->hasBriqpayUnderLyingPsp()) : ?>
             <div>
-                <strong>Chosen Payment Method:</strong> <?php echo $block->getPspUnderlyingName(); ?>
+                <strong>Chosen Payment Method:</strong> <?= $escaper->escapeHtml((string) $block->getPspUnderlyingName()) ?>
             </div>
         <?php endif; ?>        
 
         <?php if ($block->hasBriqpayPspProviderName()) : ?>
             <div>
-                <strong>Provider Name:</strong> <?php echo $block->getPspProviderName(); ?>
+                <strong>Provider Name:</strong> <?= $escaper->escapeHtml((string) $block->getPspProviderName()) ?>
             </div>
         <?php endif; ?>        
 
         <?php if ($block->hasBriqpaySessionId()) : ?>
             <div>
                 <strong>Briqpay Session ID:</strong> 
-                <a href="<?php echo $block->getBriqpayBackofficeUrl(); ?>" target="_blank">
-                    <?php echo $block->getBriqpaySessionId(); ?>
+                <a href="<?= $escaper->escapeUrl((string) $block->getBriqpayBackofficeUrl()) ?>" target="_blank" rel="noopener noreferrer">
+                    <?= $escaper->escapeHtml((string) $block->getBriqpaySessionId()) ?>
                 </a>
             </div>
         <?php endif; ?>
@@ -33,21 +34,21 @@
         <?php if ($block->hasBriqpayPspReservationId()) : ?>
             <div>
                 <strong>Briqpay PSP Reservation ID:</strong>
-                <?php echo $block->getBriqpayPspReservationId(); ?>
+                <?= $escaper->escapeHtml((string) $block->getBriqpayPspReservationId()) ?>
             </div>
         <?php endif; ?>
 
         <?php if ($block->hasBriqpayPspSecondaryReservationId()) : ?>
             <div>
                 <strong>Briqpay PSP Secondary ID:</strong>
-                <?php echo $block->getBriqpayPspSecondaryReservationId(); ?>
+                <?= $escaper->escapeHtml((string) $block->getBriqpayPspSecondaryReservationId()) ?>
             </div>
         <?php endif; ?>
 
         <?php if ($block->hasBriqpaySessionStatus()) : ?>
             <div>
                 <strong>Briqpay Transaction Status:</strong>
-                <?php echo $block->getBriqpaySessionStatus(); ?>
+                <?= $escaper->escapeHtml((string) $block->getBriqpaySessionStatus()) ?>
             </div>
         <?php endif; ?>
     </div>

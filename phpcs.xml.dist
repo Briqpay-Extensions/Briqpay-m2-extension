@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+    Magento 2 coding standard, the ruleset Adobe's Marketplace review uses, plus PHP
+    compatibility across every PHP version the module supports.
+
+    Code is brought under this standard as it is rewritten: new and rewritten files are
+    listed here; the rest of the module follows.
+-->
+<ruleset name="Briqpay Payments">
+    <description>Coding standard for the Briqpay Payments Magento module.</description>
+
+    <file>Briqpay/Payments/Test</file>
+    <file>Briqpay/Payments/Model/OrderManagement/SessionLedger.php</file>
+    <file>Briqpay/Payments/Model/OrderManagement/LinePortion.php</file>
+    <file>Briqpay/Payments/Model/OrderManagement/CaptureCartBuilder.php</file>
+    <file>Briqpay/Payments/Model/OrderManagement/OrphanedAuthorisation.php</file>
+    <file>Briqpay/Payments/Model/OrderManagement/CartPreflight.php</file>
+    <file>Briqpay/Payments/Model/Utility/Money/VatSplit.php</file>
+    <file>Briqpay/Payments/Model/Utility/OrderBlockers.php</file>
+    <file>Briqpay/Payments/Model/System/PhpRuntime.php</file>
+    <file>Briqpay/Payments/Model/System/Message/UnpatchedPhp.php</file>
+    <file>Briqpay/Payments/Console/Command/PhpCheck.php</file>
+    <file>Briqpay/Payments/Model/OrderManagement/RefundCartBuilder.php</file>
+    <file>Briqpay/Payments/Observer/StoreInvoiceForCapture.php</file>
+    <file>Briqpay/Payments/Model/Utility/OrderCreationGuard.php</file>
+
+    <exclude-pattern>*/_files/*</exclude-pattern>
+
+    <arg name="extensions" value="php,phtml"/>
+    <arg name="cache" value=".phpcs-cache"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <rule ref="Magento2"/>
+
+    <rule ref="PHPCompatibility"/>
+    <config name="testVersion" value="8.2-"/>
+</ruleset>

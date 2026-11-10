@@ -1,0 +1,38 @@
+# Static analysis for the Briqpay Payments Magento module.
+#
+# bitexpert/phpstan-magento resolves the factories and proxies Magento generates at
+# compile time, so no setup:di:compile is needed.
+#
+# Code is brought under analysis as it is rewritten: new and rewritten files are
+# listed here, with no exceptions allowed; the rest of the module follows.
+# Keep this list in step with phpcs.xml.dist.
+
+includes:
+    - vendor/bitexpert/phpstan-magento/extension.neon
+
+parameters:
+    level: 6
+
+    # The oldest PHP the module supports: code must hold on it.
+    phpVersion: 80200
+
+    paths:
+        - Briqpay/Payments/Model/OrderManagement/SessionLedger.php
+        - Briqpay/Payments/Model/OrderManagement/LinePortion.php
+        - Briqpay/Payments/Model/OrderManagement/CaptureCartBuilder.php
+        - Briqpay/Payments/Model/OrderManagement/OrphanedAuthorisation.php
+        - Briqpay/Payments/Model/OrderManagement/CartPreflight.php
+        - Briqpay/Payments/Model/Utility/Money/VatSplit.php
+        - Briqpay/Payments/Model/Utility/OrderBlockers.php
+        - Briqpay/Payments/Model/System/PhpRuntime.php
+        - Briqpay/Payments/Model/System/Message/UnpatchedPhp.php
+        - Briqpay/Payments/Console/Command/PhpCheck.php
+        - Briqpay/Payments/Model/OrderManagement/RefundCartBuilder.php
+        - Briqpay/Payments/Observer/StoreInvoiceForCapture.php
+        - Briqpay/Payments/Model/Utility/OrderCreationGuard.php
+        - Briqpay/Payments/Test/Unit
+
+    excludePaths:
+        - Briqpay/Payments/Test/Unit/_files (?)
+
+    treatPhpDocTypesAsCertain: false

@@ -1,0 +1,21 @@
+# Composer (a module package does not commit a lock file)
+/vendor/
+/composer.lock
+
+# Tool caches and build output
+/.phpunit.result.cache
+/.phpcs-cache
+/build/
+node_modules/
+dist/
+
+
+# Archives and logs
+*.zip
+*.log
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

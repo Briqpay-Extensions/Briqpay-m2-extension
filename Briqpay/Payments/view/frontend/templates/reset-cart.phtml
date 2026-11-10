@@ -1,32 +1,31 @@
-<script type="text/javascript">
-    require(['Magento_Customer/js/customer-data'], function (customerData) {
-        let attempts = 0;
-        const maxAttempts = 10;
-        const interval = 300; // ms
-
-        const intervalId = setInterval(function () {
-            try {
-                attempts++;
-
-                // This will throw if 'cart' is not yet available
-                const cart = customerData.get('cart');
-                
-                // Defensive: check if cart has data property
-                if (typeof cart !== 'undefined') {
-                    customerData.invalidate(['cart']);
-                    customerData.reload(['cart'], true);
-                    console.log('Briqpay: cart reset after retry, attempt:', attempts);
-                    clearInterval(intervalId);
-                }
-
-                if (attempts >= maxAttempts) {
-                    console.warn('Briqpay: Max attempts reached for cart reset');
-                    clearInterval(intervalId);
-                }
-            } catch (e) {
-                console.warn('Briqpay: Waiting for customerData cart...', e);
-                // Keep trying
+<?php
+/**
+ * Clears the mini-cart once the customer is back from Briqpay: the order was created
+ * on the return, after the page's customer data was last read.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+$script = <<<'JS'
+require(['Magento_Customer/js/customer-data'], function (customerData) {
+    var attempts = 0;
+    var intervalId = setInterval(function () {
+        attempts++;
+        try {
+            if (typeof customerData.get('cart') !== 'undefined') {
+                customerData.invalidate(['cart']);
+                customerData.reload(['cart'], true);
+                clearInterval(intervalId);
+                return;
             }
-        }, interval);
-    });
-</script>
+        } catch (e) {
+            // customer-data not ready yet; tried again below
+        }
+        if (attempts >= 10) {
+            clearInterval(intervalId);
+        }
+    }, 300);
+});
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

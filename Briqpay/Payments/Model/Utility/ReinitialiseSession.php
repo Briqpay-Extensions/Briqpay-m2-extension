@@ -85,11 +85,39 @@ class ReinitialiseSession
 
     /**
      * Reinitialises session data based on changes in billing, shipping, or cart.
+     *
      * @param string $sessionId
-     * @return array
+     * @param string|null $fallbackEmail
+     * @return array<string, mixed>
      * @throws \Exception
      */
     public function reinitialiseSession(string $sessionId, $fallbackEmail = null): array
+    {
+        return $this->reinitialise($sessionId, $fallbackEmail, false);
+    }
+
+    /**
+     * Sends the session's data again even when nothing changed, so the next purchase on
+     * the session is decided on current data.
+     *
+     * @param string $sessionId
+     * @param string|null $fallbackEmail
+     * @return array<string, mixed>
+     * @throws \Exception
+     */
+    public function sendAgain(string $sessionId, $fallbackEmail = null): array
+    {
+        return $this->reinitialise($sessionId, $fallbackEmail, true);
+    }
+
+    /**
+     * @param string $sessionId
+     * @param string|null $fallbackEmail
+     * @param bool $force
+     * @return array<string, mixed>
+     * @throws \Exception
+     */
+    private function reinitialise(string $sessionId, $fallbackEmail, bool $force): array
     {
         try {
             // Fetch current session data
@@ -100,17 +128,20 @@ class ReinitialiseSession
                 throw new \Exception('Unable to restart an already completed session');
             }
             // Fetch current billing, shipping, and cart data
-            $billingData = $this->billingData->getBillingData();
-            $shippingData = $this->shippingData->getShippingData();
+            // With the guest's email, as the decision compares them, so a guest who typed
+            // the email after the payment step opened is not refused as "changed".
+            $billingData = $this->billingData->getBillingData($fallbackEmail);
+            $shippingData = $this->shippingData->getShippingData($fallbackEmail);
             $cart = $this->cart->getCart();
 
             // Compare with existing session data
             $billingDataChanged = $this->compareData->compareData($sessionData['billing'] ?? [], $billingData);
-            $shippingDataChanged = $this->compareData->compareData($sessionData['shipping'] ?? [], $shippingData);
+            $shippingDataChanged = $shippingData !== null
+                && $this->compareData->compareData($sessionData['shipping'] ?? [], $shippingData);
             $cartDataChanged = $this->compareData->compareCartData($sessionData['order']['cart'] ?? [], $cart);
 
-            // Update session if any data has changed
-            if ($billingDataChanged || $shippingDataChanged || $cartDataChanged) {
+            // Update session if any data has changed, or when asked to (sendAgain()).
+            if ($force || $billingDataChanged || $shippingDataChanged || $cartDataChanged) {
                 $session = $this->updateSession->updateSession($sessionId, $fallbackEmail);
             }
 

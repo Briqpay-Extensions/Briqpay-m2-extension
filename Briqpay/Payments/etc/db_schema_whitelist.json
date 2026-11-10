@@ -1,0 +1,47 @@
+{
+    "sales_order": {
+        "column": {
+            "briqpay_psp_display_name": true,
+            "briqpay_session_id": true,
+            "briqpay_psp_reservationId": true,
+            "briqpay_psp_provider": true,
+            "briqpay_psp_underlying_payment_method": true,
+            "briqpay_secondary_reservationId": true,
+            "briqpay_accepted_terms": true,
+            "briqpay_backoffice_url": true,
+            "briqpay_session_status": true,
+            "briqpay_cin": true,
+            "briqpay_company_name": true,
+            "briqpay_company_vatNo": true,
+            "briqpay_strong_auth": true
+        },
+        "index": {
+            "SALES_ORDER_BRIQPAY_SESSION_ID": true
+        }
+    },
+    "quote": {
+        "column": {
+            "briqpay_session_id": true,
+            "briqpay_psp_display_name": true
+        }
+    },
+    "sales_invoice": {
+        "column": {
+            "briqpay_capture_id": true
+        }
+    },
+    "payment_capture_mapping": {
+        "column": {
+            "id": true,
+            "invoice_id": true,
+            "order_id": true,
+            "item_id": true,
+            "capture_id": true,
+            "quantity": true,
+            "created_at": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    }
+}

@@ -1,0 +1,130 @@
+name: Release
+
+# Two ways in:
+#   - a human pushes a tag directly, or
+#   - tag.yml creates the tag from the composer.json version and calls this
+#     workflow.
+#
+# The second path needs `workflow_call` because a tag pushed by GITHUB_TOKEN
+# does not trigger further workflow runs -- GitHub suppresses that to prevent
+# recursion, so a plain `on: push: tags` would never fire for it.
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to build and publish.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Installs and runs third-party code, so it gets read access only.
+    name: Check the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Resolve the tag
+        id: meta
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Not a release tag: $TAG"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+          coverage: none
+
+      - name: Check the tag matches the module version
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          VERSION=$(jq -r '.version' composer.json)
+
+          echo "tag:           $TAG"
+          echo "composer.json: $VERSION"
+
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Version mismatch between the tag and composer.json"
+            exit 1
+          fi
+
+      - name: Check the changelog has an entry
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if ! grep -qF "## [$TAG]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no [$TAG] section"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run the test suite
+        run: vendor/bin/phpunit --testsuite unit
+
+  release:
+    # Builds the archive from git alone and publishes it; no third-party code runs here.
+    name: Publish the module archive
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+
+      - name: Build the module archive
+        # The archive unpacks into app/code/Briqpay/Payments for a manual install.
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          mkdir -p build
+          ARCHIVE="build/BriqpayPayments-$TAG.zip"
+          git archive --format=zip --output="$ARCHIVE" "$TAG:Briqpay/Payments"
+          zip -j "$ARCHIVE" LICENSE LICENSE_AFL.txt LICENSE_OSL.txt
+          unzip -l "$ARCHIVE" | tail -1
+
+      - name: Take the release notes from the changelog
+        # The release page shows this version's CHANGELOG.md section, word for word.
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          awk -v heading="## [$TAG]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > build/notes.md
+          if ! grep -q '[^[:space:]]' build/notes.md; then
+            echo "::error::CHANGELOG.md has no notes under [$TAG]"
+            exit 1
+          fi
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check.outputs.tag }}
+          files: build/*.zip
+          body_path: build/notes.md
+          draft: false

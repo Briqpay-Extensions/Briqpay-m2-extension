@@ -5,35 +5,22 @@ use Magento\Framework\Setup\UpgradeSchemaInterface;
 use Magento\Framework\Setup\ModuleContextInterface;
 use Magento\Framework\Setup\SchemaSetupInterface;
 use Magento\Framework\DB\Ddl\Table;
-use Briqpay\Payments\Logger\Logger;
 
 class UpgradeSchema implements UpgradeSchemaInterface
 {
-    protected $logger;
-
-    public function __construct(Logger $logger)
-    {
-        $this->logger = $logger;
-        $this->logger->info('UpgradeSchema: logger instantiated');
-    }
-
     public function upgrade(SchemaSetupInterface $setup, ModuleContextInterface $context)
     {
         $setup->startSetup();
-        $this->logger->info('UpgradeSchema: start');
 
         if (version_compare($context->getVersion(), '1.1.12', '<')) {
-            $this->logger->info('UpgradeSchema: version is less than 1.1.12');
 
             $this->createOrderTableColumns($setup);
             $this->createQuoteTableColumns($setup);
             $this->createSalesOrderColumns($setup);
 
             $this->createCaptureRelationTable($setup);
-
-            $setup->endSetup();
-            $this->logger->info('UpgradeSchema: end');
         }
+        $setup->endSetup();
     }
     private function createCaptureRelationTable($setup)
     {
@@ -77,8 +64,8 @@ class UpgradeSchema implements UpgradeSchemaInterface
                 )
                 ->addColumn(
                     'quantity',
-                    Table::TYPE_INTEGER,
-                    null,
+                    Table::TYPE_DECIMAL,
+                    '12,4',
                     ['nullable' => false, 'default' => 0],
                     'Quantity'
                 )
@@ -96,27 +83,19 @@ class UpgradeSchema implements UpgradeSchemaInterface
     private function createColumnsInDb($setup, $table, $columns)
     {
         $quoteTableName = $setup->getTable($table);
-         // Define columns to be added to sales_order
-         
-          // Add columns to sales_order table
+        // Adds each column the table does not have yet.
         if ($setup->getConnection()->isTableExists($quoteTableName)) {
-            $this->logger->info('UpgradeSchema: '.$table.' table exists');
             foreach ($columns as $name => $definition) {
                 if (!$setup->getConnection()->tableColumnExists($quoteTableName, $name)) {
                     $setup->getConnection()->addColumn($quoteTableName, $name, $definition);
-                    $this->logger->info('UpgradeSchema: added column ' . $name . ' to '.$table);
-                } else {
-                    $this->logger->info('UpgradeSchema: column ' . $name . ' already exists in '.$table);
                 }
             }
-        } else {
-            $this->logger->info('UpgradeSchema: '.$table.' table does not exist');
         }
     }
     private function createQuoteTableColumns($setup)
     {
 
-         // Define columns to be added to sales_order
+         // Columns added to quote
          $quoteColumns = [
                
         'briqpay_session_id' => [
@@ -131,12 +110,11 @@ class UpgradeSchema implements UpgradeSchemaInterface
             ],
          ];
          $this->createColumnsInDb($setup, 'quote', $quoteColumns);
-          // Add columns to sales_order table
     }
     private function createSalesOrderColumns($setup)
     {
     
-         // Define columns to be added to sales_invoice
+         // Columns added to sales_invoice
          $invoiceColumns = [
             'briqpay_capture_id' => [
         'type' => Table::TYPE_TEXT,
@@ -145,13 +123,12 @@ class UpgradeSchema implements UpgradeSchemaInterface
             ],
          ];
          $this->createColumnsInDb($setup, 'sales_invoice', $invoiceColumns);
-        // Add columns to sales_invoice table
     }
     
     private function createOrderTableColumns($setup)
     {
        
-        // Define columns to be added to sales_order
+        // Columns added to sales_order
         $orderColumns = [
             'briqpay_psp_display_name' => [
                 'type' => Table::TYPE_TEXT,
@@ -220,6 +197,5 @@ class UpgradeSchema implements UpgradeSchemaInterface
             ],
         ];
         $this->createColumnsInDb($setup, 'sales_order', $orderColumns);
-// Add columns to sales_order table
     }
 }

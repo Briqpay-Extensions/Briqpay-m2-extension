@@ -1,7 +1,11 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
 
-    <!-- Preference for custom Curl client -->
-    <preference for="Magento\Framework\HTTP\Client\Curl" type="Briqpay\Payments\Rest\BriqpayCurl" />
+    <!-- Briqpay's HTTP client (it adds PATCH) for the Briqpay API client only, not for every module. -->
+    <type name="Briqpay\Payments\Rest\ApiClient">
+        <arguments>
+            <argument name="curl" xsi:type="object">Briqpay\Payments\Rest\BriqpayCurl</argument>
+        </arguments>
+    </type>
 
     <type name="Briqpay\Payments\Logger\Logger">
         <arguments>
@@ -12,13 +16,28 @@
             <argument name="scopeConfig" xsi:type="object">Magento\Framework\App\Config\ScopeConfigInterface</argument>
         </arguments>
     </type>
-    <preference for="Magento\Framework\Logger\Handler\Base" type="Briqpay\Payments\Logger\Handler" />
 
-    <!-- Define PaymentCompositeChecks with an empty list -->
-    <type name="Magento\Payment\Model\Checks\Composite">
+    <!-- The checks Magento's checkout applies to a payment method (Magento\Payment\Model\MethodList),
+         run again by the Briqpay decision. -->
+    <virtualType name="BriqpayDecisionPaymentChecks" type="Magento\Payment\Model\Checks\Composite">
         <arguments>
             <argument name="list" xsi:type="array">
-                <!-- No payment checks are defined here by default -->
+                <item name="use_checkout" xsi:type="object">Magento\Payment\Model\Checks\CanUseCheckout</item>
+                <item name="use_for_country" xsi:type="object">Magento\Payment\Model\Checks\CanUseForCountry</item>
+                <item name="use_for_currency" xsi:type="object">Magento\Payment\Model\Checks\CanUseForCurrency</item>
+                <item name="order_total_min_max" xsi:type="object">Magento\Payment\Model\Checks\TotalMinMax</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <type name="Briqpay\Payments\Model\Utility\MakeDecisionLogic">
+        <arguments>
+            <argument name="paymentCompositeChecks" xsi:type="object">BriqpayDecisionPaymentChecks</argument>
+        </arguments>
+    </type>
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="briqpay_php_check" xsi:type="object">Briqpay\Payments\Console\Command\PhpCheck</item>
             </argument>
         </arguments>
     </type>

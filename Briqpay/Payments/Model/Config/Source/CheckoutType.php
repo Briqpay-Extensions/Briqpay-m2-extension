@@ -2,9 +2,9 @@
 
 namespace Briqpay\Payments\Model\Config\Source;
 
-use Magento\Framework\Option\ArrayInterface;
+use Magento\Framework\Data\OptionSourceInterface;
 
-class CheckoutType implements ArrayInterface
+class CheckoutType implements OptionSourceInterface
 {
     /**
      * Return array of options as value-label pairs

@@ -3,6 +3,7 @@
 namespace Briqpay\Payments\Model\PaymentModule;
 
 use Briqpay\Payments\Model\Config\SetupConfig;
+use Briqpay\Payments\Model\Utility\CompanyName;
 use Briqpay\Payments\Model\Utility\GenerateCart;
 use Briqpay\Payments\Model\Utility\AssignBillingAddress;
 use Briqpay\Payments\Model\Utility\AssignShippingAddress;
@@ -41,7 +42,7 @@ class UpdateSession
     private $apiClient;
 
     /**
-     * @var LoggerInterface
+     * @var Logger
      */
     private $logger;
 
@@ -113,9 +114,17 @@ class UpdateSession
                 'shipping' => $shippingData
             ]
             ];
+            $body['data'] = array_filter($body['data'], static function ($block): bool {
+                return $block !== null;
+            });
         
             $quoteId = $this->checkoutSession->getQuoteId();
             $quote = $this->quoteRepository->getActive($quoteId);
+            if (($config['customer_type'] ?? '') === 'business') {
+                // The company block is the session's from its creation; the names on the
+                // addresses go with every update, as at creation.
+                $body['data'] = CompanyName::onAddresses($body['data'], CompanyName::fromQuote($quote));
+            }
 
             $this->eventManager->dispatch('briqpay_payment_module_update_prepare', [
                 'body' => &$body, // Passing by reference
@@ -126,13 +135,10 @@ class UpdateSession
             $this->logger->error('Error dispatching event ' . $e->getMessage(), [
                 'exception' => $e,
                 'sessionId' => $sessionId,
-                'body' => $body
             ]);
+            $this->logger->debug('Briqpay session update that failed', ['body' => $body]);
             throw new \Exception('Error dispatching event session', 0, $e);
         }
-
-        // Rounding is now settled unconditionally as part of $cartData - strict_rounding
-        // is kept as a no-op config field for one release, then removed.
 
         try {
             $response = $this->apiClient->request('PATCH', $uri, $body);
@@ -141,8 +147,8 @@ class UpdateSession
             $this->logger->error('Error updating session: ' . $e->getMessage(), [
                 'exception' => $e,
                 'sessionId' => $sessionId,
-                'body' => $body
             ]);
+            $this->logger->debug('Briqpay session update that failed', ['body' => $body]);
             throw new \Exception('Error updating session', 0, $e);
         }
     }

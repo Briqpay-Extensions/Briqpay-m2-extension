@@ -1,0 +1,12 @@
+<?php
+/**
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+// No order is named: the page cannot tell which order a visitor paid for.
+?>
+<div class="briqpay-order-paid">
+    <h2><?= $escaper->escapeHtml(__('Thank you for your payment.')) ?></h2>
+    <p><?= $escaper->escapeHtml(__('Your order will be processed as soon as Briqpay confirms the payment. The shop will be in touch.')) ?></p>
+    <p><a href="<?= $escaper->escapeUrl($block->getUrl('')) ?>"><?= $escaper->escapeHtml(__('Continue to the shop')) ?></a></p>
+</div>

@@ -12,8 +12,20 @@ class Logger extends MonologLogger
     protected $scopeConfig;
     protected $logLevel;
     protected $scopeHelper;
-    private $sensitiveKeys = ['firstName', 'lastName', 'email', 'streetAddress','streetAddress2', 'phoneNumber'];
-    private $testMode;
+    /**
+     * Customer data never written to the log, in test mode or live. Matched by key at any depth.
+     *
+     * @var array<int, string>
+     */
+    private $sensitiveKeys = [
+        'firstName', 'lastName', 'email', 'streetAddress', 'streetAddress2', 'phoneNumber', 'zip', 'city',
+        'payerPhone', 'identificationNumber', 'dateOfBirth', 'clientToken', 'htmlSnippet',
+        // Briqpay's strong authentication, company and consumer blocks as a whole (a
+        // sole trader's company number is a personal number); a cart line's name stays.
+        'strongAuth', 'company', 'consumer', 'cin', 'companyName',
+        // Magento's own address and customer keys, should a quote or address be logged.
+        'firstname', 'lastname', 'telephone', 'street', 'postcode', 'customer_email',
+    ];
     public function __construct(
         $name,
         ScopeConfigInterface $scopeConfig,
@@ -24,7 +36,6 @@ class Logger extends MonologLogger
         $this->scopeHelper = $scopeHelper;
         parent::__construct($name, $handlers);
         $this->logLevel = $this->getLogLevel();
-        $this->testMode  = $this->getTestMode();
     }
 
     protected function getTestMode()
@@ -43,7 +54,8 @@ class Logger extends MonologLogger
             'payment/briqpay/advanced/log_level',
             ScopeInterface::SCOPE_STORE
         );
-        return $logLevel ? (int)$logLevel : MonologLogger::DEBUG; // Default to DEBUG if not set
+        // INFO unless configured: what the module did, without the request bodies DEBUG adds.
+        return $logLevel ? (int)$logLevel : MonologLogger::INFO;
     }
     /**
      * Log a message if it meets or exceeds the configured log level
@@ -56,7 +68,7 @@ class Logger extends MonologLogger
     public function log($level, $message, array $context = []): void
     {
         if ($level >= $this->logLevel) {
-            parent::log($level, $message, $context);
+            parent::log($level, $this->maskMessage((string) $message), $this->maskSensitiveData($context));
         }
     }
 
@@ -64,67 +76,66 @@ class Logger extends MonologLogger
     {
         
         if (MonologLogger::INFO >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
-            parent::log(MonologLogger::INFO, $message, $context);
+            $context = $this->maskSensitiveData($context);
+            parent::log(MonologLogger::INFO, $this->maskMessage((string) $message), $context);
         }
     }
     public function debug($message, array $context = []) : void
     {
         if (MonologLogger::DEBUG >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
+            $context = $this->maskSensitiveData($context);
 
             
-            parent::log(MonologLogger::DEBUG, $message, $context);
+            parent::log(MonologLogger::DEBUG, $this->maskMessage((string) $message), $context);
         }
+    }
+    public function notice($message, array $context = []) : void
+    {
+        // log() filters by the configured level and masks.
+        $this->log(MonologLogger::NOTICE, $message, $context);
     }
     public function warning($message, array $context = []) : void
     {
         if (MonologLogger::WARNING >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
-            parent::log(MonologLogger::WARNING, $message, $context);
+            $context = $this->maskSensitiveData($context);
+            parent::log(MonologLogger::WARNING, $this->maskMessage((string) $message), $context);
         }
     }
     public function error($message, array $context = []) : void
     {
         if (MonologLogger::ERROR >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
-            parent::log(MonologLogger::ERROR, $message, $context);
+            $context = $this->maskSensitiveData($context);
+            parent::log(MonologLogger::ERROR, $this->maskMessage((string) $message), $context);
         }
     }
     public function alert($message, array $context = []) : void
     {
         if (MonologLogger::ALERT >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
-            parent::log(MonologLogger::ALERT, $message, $context);
+            $context = $this->maskSensitiveData($context);
+            parent::log(MonologLogger::ALERT, $this->maskMessage((string) $message), $context);
         }
     }
     public function critical($message, array $context = []) : void
     {
         if (MonologLogger::CRITICAL >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
-            parent::log(MonologLogger::CRITICAL, $message, $context);
+            $context = $this->maskSensitiveData($context);
+            parent::log(MonologLogger::CRITICAL, $this->maskMessage((string) $message), $context);
         }
     }
     public function emergency($message, array $context = []) : void
     {
         if (MonologLogger::EMERGENCY >= $this->logLevel) {
-            if (!$this->testMode) {
-                $context = $this->maskSensitiveData($context);
-            }
-            parent::log(MonologLogger::EMERGENCY, $message, $context);
+            $context = $this->maskSensitiveData($context);
+            parent::log(MonologLogger::EMERGENCY, $this->maskMessage((string) $message), $context);
         }
+    }
+
+    /**
+     * An e-mail address in a log message is masked; the message is otherwise untouched.
+     */
+    private function maskMessage(string $message): string
+    {
+        return (string) preg_replace('/[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+/', '***@***', $message);
     }
 
     private function maskSensitiveData(array $context) : array
@@ -144,7 +155,7 @@ class Logger extends MonologLogger
 
     private function maskValue($value) : string
     {
-        // You can customize the masking logic here
-        return str_repeat('*', strlen($value));
+        // Same length as the value, so an empty field stays recognisable as empty.
+        return is_scalar($value) ? str_repeat('*', strlen((string) $value)) : '***';
     }
 }

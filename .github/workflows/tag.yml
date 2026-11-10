@@ -1,0 +1,91 @@
+name: Tag
+
+# Tagging is driven by the module's own version number.
+#
+# A push to main whose CI run passes is what makes a release: this workflow
+# reads `version` from composer.json at the commit CI tested, and when that
+# version has no tag yet it creates one and hands off to release.yml.
+#
+# It runs only after CI on main has succeeded, never on the push itself,
+# because Packagist publishes a version as soon as its tag exists. So a tag,
+# and with it a Packagist release, only ever exists for a green build.
+#
+# Bumping the version in a commit is therefore the act of cutting a release.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Tag the module version
+    # Manual runs are allowed on main only; automatic ones only for a successful CI
+    # run on a push to main (not, say, a pull request that targets main).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      created: ${{ steps.check.outputs.created }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit CI tested, not whatever main points at by now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Read the module version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' composer.json)
+          echo "composer.json: $VERSION"
+
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version '$VERSION' is not semver"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create the tag if this version is new
+        id: check
+        run: |
+          # Plain X.Y.Z, the convention every earlier release tag on this repository uses.
+          TAG="${{ steps.version.outputs.version }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists, nothing to do."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! grep -q "^## \[${{ steps.version.outputs.version }}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no [${{ steps.version.outputs.version }}] section"
+            exit 1
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Briqpay Payments for Magento 2 $TAG"
+          git push origin "$TAG"
+
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Created $TAG"
+
+  release:
+    name: Release
+    needs: tag
+    if: needs.tag.outputs.created == 'true'
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

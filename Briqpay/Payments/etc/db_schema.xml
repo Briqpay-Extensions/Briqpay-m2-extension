@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+    The module's columns and table. The order table's session id column is an indexed
+    varchar(64); an upgrade from 1.x changes it to that once.
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="sales_order" resource="sales">
+        <column xsi:type="text" name="briqpay_psp_display_name" nullable="true" comment="Briqpay: psp display name"/>
+        <!-- A Briqpay session id (a UUID); indexed, as a webhook for an order whose quote
+             Magento has removed finds the order through it. -->
+        <column xsi:type="varchar" name="briqpay_session_id" nullable="true" length="64" comment="Briqpay: session id"/>
+        <column xsi:type="text" name="briqpay_psp_reservationId" nullable="true" comment="Briqpay: psp reservationId"/>
+        <column xsi:type="text" name="briqpay_psp_provider" nullable="true" comment="Briqpay: psp provider"/>
+        <column xsi:type="text" name="briqpay_psp_underlying_payment_method" nullable="true" comment="Briqpay: psp underlying payment method"/>
+        <column xsi:type="text" name="briqpay_secondary_reservationId" nullable="true" comment="Briqpay: secondary reservationId"/>
+        <column xsi:type="text" name="briqpay_accepted_terms" nullable="true" comment="Briqpay: accepted terms"/>
+        <column xsi:type="text" name="briqpay_backoffice_url" nullable="true" comment="Briqpay: backoffice url"/>
+        <column xsi:type="text" name="briqpay_session_status" nullable="true" comment="Briqpay: session status"/>
+        <column xsi:type="text" name="briqpay_cin" nullable="true" comment="Briqpay: cin"/>
+        <column xsi:type="text" name="briqpay_company_name" nullable="true" comment="Briqpay: company name"/>
+        <column xsi:type="text" name="briqpay_company_vatNo" nullable="true" comment="Briqpay: company vatNo"/>
+        <column xsi:type="text" name="briqpay_strong_auth" nullable="true" comment="Briqpay: strong auth"/>
+        <index referenceId="SALES_ORDER_BRIQPAY_SESSION_ID" indexType="btree">
+            <column name="briqpay_session_id"/>
+        </index>
+    </table>
+    <table name="quote" resource="checkout">
+        <column xsi:type="text" name="briqpay_session_id" nullable="true" comment="Briqpay session id"/>
+        <column xsi:type="text" name="briqpay_psp_display_name" nullable="true" comment="Briqpay: payment method chosen"/>
+    </table>
+    <table name="sales_invoice" resource="sales">
+        <column xsi:type="text" name="briqpay_capture_id" nullable="true" comment="Briqpay capture id"/>
+    </table>
+    <table name="payment_capture_mapping" resource="default" engine="innodb" comment="Payment Capture Mapping Table">
+        <column xsi:type="int" name="id" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="invoice_id" nullable="false" comment="Invoice ID"/>
+        <column xsi:type="int" name="order_id" nullable="false" comment="Order ID"/>
+        <column xsi:type="int" name="item_id" nullable="false" comment="Item ID"/>
+        <column xsi:type="varchar" name="capture_id" nullable="false" length="255" comment="Capture ID"/>
+        <column xsi:type="decimal" name="quantity" nullable="false" default="0" precision="12" scale="4" comment="Quantity"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP" comment="Created at"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+    </table>
+</schema>

@@ -34,13 +34,30 @@ class CancelOrder implements ObserverInterface
             $order = $observer->getEvent()->getOrder();
             $this->logger->info('Order retrieved in observer.', ['order_id' => $order->getId()]);
 
-            if ($order->getPayment()->getMethod() == 'briqpay' && $order->getState() == Order::STATE_CANCELED) {
-                $this->logger->info('Briqpay payment method detected and order is being canceled.');
+            // Cancelling a partly invoiced order leaves it processing or complete, not
+            // canceled; its uninvoiced rest must still be released at Briqpay.
+            $cancelled = $order->getState() == Order::STATE_CANCELED || (float) $order->getTotalInvoiced() > 0;
+            if ($order->getPayment()->getMethod() == 'briqpay' && $cancelled) {
+                $this->logger->info('Briqpay payment method detected and order is being cancelled.');
                 $cancelReturn = $this->briqpayCancelOrder->cancel($order);
 
-                if (isset($cancelReturn['error']) && $cancelReturn['error'] == 'Order not canceled not at PSP') {
-                    $this->logger->warning('Order canceled in Magento, but not at PSP. Warning: Order not canceled not at PSP.');
-                    $this->messageManager->addWarningMessage(__('The payment method does not support cancel at Briqpay. Please go to the payment provider and cancel the order manually'));
+                if (isset($cancelReturn['error'])
+                    && $cancelReturn['error'] === BriqpayCancelOrder::RELEASE_NOT_SUPPORTED
+                ) {
+                    $warning = __(
+                        'The uninvoiced items are cancelled in Magento, but the payment method cannot release the '
+                        . 'uncaptured remainder at Briqpay. Release it with the payment provider, or let the '
+                        . 'authorisation expire.'
+                    );
+                    $this->messageManager->addWarningMessage($warning);
+                    // Magento saves the order after this event, so the note stays with it.
+                    $order->addCommentToStatusHistory((string) $warning);
+                }
+                if (isset($cancelReturn['error']) && $cancelReturn['error'] === \Briqpay\Payments\Rest\ApiClient::CANCEL_NOT_SUPPORTED) {
+                    $this->logger->warning('Order cancelled in Magento, but not at Briqpay: the payment method does not support it.');
+                    $this->messageManager->addWarningMessage(__(
+                        'The payment method cannot cancel the payment at Briqpay. Cancel it with the payment provider.'
+                    ));
                 }
             }
         } catch (LocalizedException $e) {
@@ -48,7 +65,7 @@ class CancelOrder implements ObserverInterface
             throw $e;
         } catch (\Exception $e) {
             $this->logger->error('General Exception in CancelOrder observer: ' . $e->getMessage());
-            throw new LocalizedException(__('Error canceling order.'));
+            throw new LocalizedException(__('Error cancelling order.'));
         }
     }
 }

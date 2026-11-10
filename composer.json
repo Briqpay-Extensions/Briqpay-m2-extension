@@ -1,12 +1,35 @@
 {
   "name": "briqpay/module-payments",
-  "description": "Briqpay Payments module for Magento 2, providing seamless integration with Briqpay payment gateway.",
+  "description": "Briqpay payments for Magento 2 and Adobe Commerce.",
   "require": {
-    "php": ">=7.1",
-    "magento/framework": "^103.0"
+    "php": "~8.2.0||~8.3.0||~8.4.0||~8.5.0",
+    "ext-curl": "*",
+    "ext-mbstring": "*",
+    "magento/framework": "^103.0.6",
+    "magento/module-backend": "^102.0.6",
+    "magento/module-catalog": "^104.0.6",
+    "magento/module-checkout": "^100.4.6",
+    "magento/module-cms": "^104.0.6",
+    "magento/module-config": "^101.2.6",
+    "magento/module-csp": "^100.4.5",
+    "magento/module-customer": "^103.0.6",
+    "magento/module-directory": "^100.4.6",
+    "magento/module-payment": "^100.4.6",
+    "magento/module-quote": "^101.2.6",
+    "magento/module-sales": "^103.0.6",
+    "magento/module-store": "^101.1.6",
+    "magento/module-weee": "^100.4.6"
+  },
+  "require-dev": {
+    "bitexpert/phpstan-magento": "^0.44",
+    "magento/magento-coding-standard": "^41",
+    "php-parallel-lint/php-parallel-lint": "^1.4",
+    "phpmd/phpmd": "^2.15",
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "^9.6"
   },
   "type": "magento2-module",
-  "version": "1.2.2",
+  "version": "2.0.0",
   "license": "OSL-3.0 OR AFL-3.0",
   "autoload": {
     "psr-4": {
@@ -24,10 +47,49 @@
       "role": "Author"
     }
   ],
-  "keywords": ["magento", "magento2", "payment", "briqpay", "ecommerce"],
+  "keywords": [
+    "magento",
+    "magento2",
+    "payment",
+    "briqpay",
+    "ecommerce"
+  ],
   "support": {
     "email": "support@briqpay.com",
     "docs": "https://cdn.briqpay.com/static/plugins/Magento/Briqpay-M2-Extension-developer-guide.pdf"
+  },
+  "repositories": {
+    "mage-os": {
+      "type": "composer",
+      "url": "https://mirror.mage-os.org/",
+      "only": [
+        "magento/*"
+      ]
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true,
+      "magento/composer-dependency-version-audit-plugin": false,
+      "magento/magento-composer-installer": false,
+      "laminas/laminas-dependency-plugin": false
+    }
+  },
+  "scripts": {
+    "lint": "parallel-lint --exclude vendor Briqpay",
+    "cs": "phpcs",
+    "cs:fix": "phpcbf",
+    "stan": "phpstan analyse --memory-limit=2G --no-progress",
+    "md": "@php -d error_reporting=8191 vendor/bin/phpmd Briqpay/Payments/Test text phpmd.xml.dist",
+    "test:unit": "phpunit --testsuite unit",
+    "check": [
+      "@lint",
+      "@cs",
+      "@stan",
+      "@md",
+      "@test:unit"
+    ]
   },
   "minimum-stability": "stable",
   "prefer-stable": true

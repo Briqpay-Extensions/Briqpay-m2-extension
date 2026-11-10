@@ -6,8 +6,11 @@ use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Briqpay\Payments\Logger\Logger;
 
-class CreateSessionObserverExample implements ObserverInterface
+class UpdateSessionObserverExample implements ObserverInterface
 {
+    /**
+     * @var Logger
+     */
     protected $logger;
 
     public function __construct(Logger $logger)
@@ -22,7 +25,7 @@ class CreateSessionObserverExample implements ObserverInterface
         $quote = $observer->getEvent()->getData('quote');
 
         // Log initial state of the body 
-        $this->logger->info('Observer executed. Initial body:', ['body' => $body]);
+        $this->logger->debug('Observer executed. Initial body:', ['body' => $body]);
 
         // Override if needed.
 

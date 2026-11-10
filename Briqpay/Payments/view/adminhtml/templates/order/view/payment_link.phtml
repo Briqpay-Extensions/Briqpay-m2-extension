@@ -1,0 +1,35 @@
+<?php /** @var \Briqpay\Payments\Block\Adminhtml\Order\PaymentLink $block */ ?>
+<?php /** @var \Magento\Framework\Escaper $escaper */ ?>
+<?php if ($block->isShown()) : ?>
+    <div class="transaction-info-container briqpay-payment-link">
+        <span class="title"><?= $escaper->escapeHtml(__('Briqpay payment link')) ?></span>
+        <?php if ($block->getLinkUrl() !== '') : ?>
+            <div>
+                <strong><?= $escaper->escapeHtml(__('Link')) ?>:</strong>
+                <a href="<?= $escaper->escapeUrl($block->getLinkUrl()) ?>" target="_blank" rel="noopener noreferrer"><?= $escaper->escapeHtml($block->getLinkUrl()) ?></a>
+            </div>
+            <div>
+                <strong><?= $escaper->escapeHtml(__('Last sent to Briqpay')) ?>:</strong>
+                <?= $escaper->escapeHtml($block->getLinkCreatedAt()) ?> UTC
+                (<?= $escaper->escapeHtml($block->getLinkCustomerType() === 'business' ? __('Business') : __('Consumer')) ?>)
+            </div>
+            <p><?= $escaper->escapeHtml(__('Send the link to the customer. The order moves on (normally to Processing) when the payment is made.')) ?></p>
+            <p><?= $escaper->escapeHtml(__('Update sends the order\'s current details to Briqpay again; the link stays the same while it can still be paid. Choosing the other customer type makes a new link.')) ?></p>
+        <?php else : ?>
+            <p><?= $escaper->escapeHtml(__('This order is waiting for its payment. Create a link to Briqpay\'s payment page and send it to the customer.')) ?></p>
+        <?php endif; ?>
+        <form method="post" action="<?= $escaper->escapeUrl($block->getCreateUrl()) ?>">
+            <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+            <label>
+                <?= $escaper->escapeHtml(__('Customer type')) ?>
+                <select name="customer_type">
+                    <option value="consumer"<?= $block->getDefaultCustomerType() === 'consumer' ? ' selected' : '' ?>><?= $escaper->escapeHtml(__('Consumer')) ?></option>
+                    <option value="business"<?= $block->getDefaultCustomerType() === 'business' ? ' selected' : '' ?>><?= $escaper->escapeHtml(__('Business')) ?></option>
+                </select>
+            </label>
+            <button type="submit" class="action-secondary">
+                <?= $escaper->escapeHtml($block->getLinkUrl() !== '' ? __('Update payment link') : __('Create payment link')) ?>
+            </button>
+        </form>
+    </div>
+<?php endif; ?>

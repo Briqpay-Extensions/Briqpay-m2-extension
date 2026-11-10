@@ -55,7 +55,13 @@ class StrongAuthCustomData extends Template
             return null;
         }
         $signedAt = $decodedData['output']['signedAt'];
-        $utcDateTime = new DateTime($signedAt, new DateTimeZone('UTC'));
+        try {
+            $utcDateTime = new DateTime((string) $signedAt, new DateTimeZone('UTC'));
+        } catch (\Exception $e) {
+            // Stored by the order creation from Briqpay's data; a value no date keeps
+            // the admin order view rendering.
+            return null;
+        }
         $targetTimeZone = new DateTimeZone('Europe/Stockholm');
         $utcDateTime->setTimezone($targetTimeZone);
         $readableDate = $utcDateTime->format('Y-m-d H:i:s');

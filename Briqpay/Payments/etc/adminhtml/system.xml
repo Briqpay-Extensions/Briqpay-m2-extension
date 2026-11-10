@@ -11,18 +11,19 @@
                 </field>
                 
                 <field id="test_mode" translate="label" type="select" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
-                    <label>Testmode</label>
+                    <label>Test mode</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
                 
                 <field id="client_id" type="text" translate="label comment" showInDefault="1" showInWebsite="1" showInStore="1" sortOrder="40">
                     <label>Client ID</label>
-                    <comment>Client ID, you will get this from Briqpay.</comment>
+                    <comment>Your client ID from Briqpay.</comment>
                 </field>
                 
-                <field id="shared_secret" type="text" translate="label comment" showInDefault="1" showInWebsite="1" showInStore="1" sortOrder="50">
+                <field id="shared_secret" type="obscure" translate="label comment" showInDefault="1" showInWebsite="1" showInStore="1" sortOrder="50">
                     <label>Client Secret</label>
-                    <comment>The shared secret, you will get this from Briqpay.</comment>
+                    <comment>Your client secret from Briqpay. Stored encrypted.</comment>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
                 </field>
                 
                 <field id="checkout_type" translate="label" type="select" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
@@ -40,33 +41,66 @@
                     <label>Payment Method Title</label>
                     <comment>Title for the payment method displayed during checkout.</comment>
                 </field>
+                <field id="allowspecific" translate="label" type="allowspecific" sortOrder="82" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Payment from Applicable Countries</label>
+                    <source_model>Magento\Payment\Model\Config\Source\Allspecificcountries</source_model>
+                </field>
+                <field id="specificcountry" translate="label" type="multiselect" sortOrder="83" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Payment from Specific Countries</label>
+                    <source_model>Magento\Directory\Model\Config\Source\Country</source_model>
+                    <can_be_empty>1</can_be_empty>
+                    <depends>
+                        <field id="allowspecific">1</field>
+                    </depends>
+                </field>
+                <field id="min_order_total" translate="label" type="text" sortOrder="84" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Minimum Order Total</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
+                <field id="max_order_total" translate="label comment" type="text" sortOrder="85" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Maximum Order Total</label>
+                    <comment>Leave empty to disable limit.</comment>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
 
                 <!-- New Advanced Section -->
                 <group id="advanced" translate="label" type="fieldset" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Briqpay Advanced Features</label>
                     <comment>This section contains advanced settings for the Briqpay payment module.</comment>
                     
+                    <field id="php_backport_confirmed" translate="label comment" type="select" sortOrder="105" showInDefault="1" showInWebsite="0" showInStore="0">
+                        <label>PHP security fix backported</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Set to Yes only when your hosting provider confirms that this server's PHP build includes the fixes for CVE-2026-109618 and CVE-2026-109619 under an older version number. It hides the admin warning; it does not change how PHP runs.</comment>
+                    </field>
+                    <field id="payment_link_title" translate="label comment" type="text" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Payment link: page title</label>
+                        <comment>Shown on Briqpay's payment page for orders created in the admin. The store name when empty; a title shorter than 3 characters is not shown.</comment>
+                    </field>
+                    <field id="payment_link_logo_url" translate="label comment" type="text" sortOrder="61" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Payment link: logo URL</label>
+                        <comment>A URL ending in .png, .jpg, .jpeg or .svg, or empty; any other value is not shown.</comment>
+                    </field>
+                    <field id="payment_link_show_cart" translate="label" type="select" sortOrder="62" showInDefault="1" showInWebsite="1" showInStore="1">
+                        <label>Payment link: show the order lines</label>
+                        <comment>Whether Briqpay's payment page lists the order's lines; the total is always shown.</comment>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    </field>
                     <field id="log_level" translate="label" type="select" sortOrder="110" showInDefault="1" showInWebsite="1" showInStore="1">
                         <label>Log Level</label>
                         <source_model>Briqpay\Payments\Model\Config\Source\LogLevel</source_model>
-                        <comment>Select the level of logging.</comment>
+                        <comment>INFO is recommended; DEBUG logs every request to Briqpay.</comment>
                     </field>
 
-                    <field id="custom_decision" translate="label" type="select" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <field id="custom_decision" translate="label comment" type="select" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
                         <label>Custom decision logic</label>
-                        <comment>Enabling custom decision triggers an event during the Briqpay decision process, allowing you to perform custom validation and intercept the decision before completion. The custom decision has a 10-second timeout.</comment>
+                        <comment>Before the purchase is decided, the checkout page fires the browser event briqpayDecision; a script that answers with briqpayDecisionResponse and decision false stops the purchase. Without an answer within 10 seconds the purchase goes on.</comment>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     </field> 
-                    
-                    <field id="strict_rounding" translate="label comment" sortOrder="120" type="select" showInDefault="1" showInWebsite="1" showInStore="1">
-                        <label>Strict rounding (deprecated)</label>
-                        <comment>No longer used. As of 1.2.0 every cart is always reconciled with a rounding line, so this setting has no effect and will be removed in a future release.</comment>
-                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    </field>
 
                     <field id="payment_overlay" translate="label comment" sortOrder="130" type="select" showInDefault="1" showInWebsite="1" showInStore="1">
                         <label>Overlay during purchase</label>
-                        <comment>Apply overlay around the Briqpay iFrame during purchase.</comment>
+                        <comment>Dim the page around the Briqpay payment window while a payment runs.</comment>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     </field>
                     <field id="enable_terms" translate="label" type="select" sortOrder="140" showInDefault="1" showInWebsite="1" showInStore="1">

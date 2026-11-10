@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Every PHP extension magento/framework declares, so Composer resolves the same
+  # Magento packages a merchant install would.
+  PHP_EXTENSIONS: bcmath, ctype, curl, dom, ftp, gd, hash, iconv, intl, mbstring, openssl, pdo_mysql, simplexml, soap, sockets, sodium, xsl, zip
+
+jobs:
+  # The module has to load on every PHP version it supports.
+  syntax:
+    name: PHP ${{ matrix.php }} syntax
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.2", "8.3", "8.4", "8.5"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Lint every PHP file
+        run: |
+          find Briqpay -name '*.php' -o -name '*.phtml' | tr '\n' '\0' \
+            | xargs -0 -n1 -P4 php -l
+
+  # Composer resolves the newest Magento release each PHP version supports (2.4.8 on
+  # PHP 8.2, 2.4.9 on later ones); the lowest supported release, 2.4.6, is tested
+  # before each release.
+  tests:
+    name: Unit tests on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.2", "8.3", "8.4", "8.5"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit --testsuite unit --testdox
+
+  # Report-only until the first measured number is recorded; then a minimum is
+  # enforced here and only ever raised.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run PHPUnit with coverage
+        run: |
+          mkdir -p build
+          vendor/bin/phpunit --testsuite unit \
+            --coverage-text --coverage-clover=build/clover.xml \
+            | tee build-coverage.txt
+          grep -E '^\s+(Classes|Methods|Lines):' build-coverage.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: build/clover.xml
+          retention-days: 14
+
+  static-analysis:
+    name: Coding standard and static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The newest PHP, resolving the newest Magento; phpstan.neon.dist still
+      # analyses as PHP 8.2, the oldest supported.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Magento coding standard and PHP compatibility
+        run: composer cs
+
+      - name: PHPStan
+        run: composer stan
+
+      - name: PHP Mess Detector
+        run: composer md
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks over the full history
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.18.4 \
+            detect --source /repo --no-banner --redact --verbose
+
+  release-readiness:
+    name: Version, changelog and leftovers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the declared version is semver and has a changelog entry
+        run: |
+          VERSION=$(jq -r '.version' composer.json)
+          echo "composer.json: $VERSION"
+
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version '$VERSION' is not semver"
+            exit 1
+          fi
+
+          if ! grep -qE "^## \[($VERSION|Unreleased)\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has neither a [$VERSION] nor an [Unreleased] section"
+            exit 1
+          fi
+
+          MODULE_VERSION=$(sed -n 's/.*setup_version="\([^"]*\)".*/\1/p' Briqpay/Payments/etc/module.xml)
+          if [ "$MODULE_VERSION" != "$VERSION" ]; then
+            echo "::error::etc/module.xml setup_version is '$MODULE_VERSION', composer.json version is '$VERSION'"
+            exit 1
+          fi
+
+      - name: Check composer.json is valid
+        run: composer validate --no-check-publish --no-check-lock
+
+      - name: Check no debugging statements were left behind
+        run: |
+          if grep -rnE '\b(var_dump|print_r|dd|dump|die)\(' --include='*.php' --include='*.phtml' Briqpay/Payments \
+               --exclude-dir=Test; then
+            echo "::error::Debugging statement found"
+            exit 1
+          fi
+          if grep -rnE 'console\.(log|debug)\(' --include='*.js' --include='*.phtml' Briqpay/Payments/view; then
+            echo "::error::console.log left in storefront sources"
+            exit 1
+          fi

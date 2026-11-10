@@ -1,24 +1,32 @@
 <?xml version="1.0"?>
-<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../Store/etc/config.xsd">
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
     <default>
         <payment>
             <briqpay>
-                <payment_action>true</payment_action> <!-- You can use another method like authorize,capture etc.  -->
+                <!-- Not one of Magento's actions on purpose: the payment is authorised at
+                     Briqpay before the order exists, and the module sets the order's state and
+                     status itself when it creates the order (CreateOrder, AsyncCreateOrder).
+                     Magento's own authorize/capture actions must not run for this method. -->
+                <payment_action>true</payment_action>
                 <model>Briqpay\Payments\Model\PaymentMethod</model>
                 <active>0</active>
                 <title>Briqpay</title>
-                <custom_decision>0</custom_decision>
                 <can_capture>true</can_capture>
                 <can_refund_partial_per_invoice>1</can_refund_partial_per_invoice>
                 <is_gateway>true</is_gateway>
-                <can_void>true</can_void>
+                <can_void>false</can_void>
                 <can_cancel>true</can_cancel>
-                <can_refund_partial_per_invoice>true</can_refund_partial_per_invoice>
                 <can_refund>true</can_refund>
                 <order_status>pending_payment</order_status> <!-- Set your default order status -->
                 <checkout_title>Payment Methods</checkout_title>
-                <strict_rounding>0</strict_rounding>
-                <payment_overlay>0</payment_overlay>
+                <test_mode>1</test_mode>
+                <checkout_type>consumer</checkout_type>
+                <advanced>
+                    <log_level>200</log_level>
+                    <payment_link_show_cart>1</payment_link_show_cart>
+                    <custom_decision>0</custom_decision>
+                    <payment_overlay>0</payment_overlay>
+                </advanced>
             </briqpay>
         </payment>
     </default>

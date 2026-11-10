@@ -75,7 +75,7 @@ class MakeDecision
             $this->logger->error('Error making decision for session ' . $sessionId . ': ' . $e->getMessage(), [
                 'exception' => $e,
             ]);
-            throw new \Exception('Error making decision for session ' . $sessionId);
+            throw new \Exception('Error making decision for session ' . $sessionId, 0, $e);
         }
     }
 }

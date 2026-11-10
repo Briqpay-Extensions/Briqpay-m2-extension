@@ -35,9 +35,29 @@ class AssignBillingAddress
             $this->logger->debug('No Quote ID found in session.');
             return null;
         }
-
         try {
             $quote = $this->cartRepository->getActive($quoteId);
+        } catch (LocalizedException $e) {
+            $this->logger->error('LocalizedException: ' . $e->getMessage());
+            return null;
+        } catch (\Exception $e) {
+            $this->logger->error('Exception: ' . $e->getMessage());
+            return null;
+        }
+
+        return $this->getBillingDataFor($quote, $fallbackEmail);
+    }
+
+    /**
+     * The billing prefill of a given quote (the checkout's, or an admin order's).
+     *
+     * @param mixed $quote
+     * @param string|null $fallbackEmail
+     * @return array<string, string>|null
+     */
+    public function getBillingDataFor($quote, $fallbackEmail = null)
+    {
+        try {
 
             $billingAddress = $quote->getBillingAddress();
             if (!$billingAddress) {
@@ -74,7 +94,7 @@ class AssignBillingAddress
                 $customerEmail = $quote->getCustomerEmail();
                 $customerId = $quote->getCustomerId();
             
-                if ($customerId || is_null($customerEmail)) {
+                if ($customerId) {
                     try {
                         $customer = $this->customerRepository->getById($customerId);
                         $customerEmail = $customer->getEmail();
@@ -84,6 +104,14 @@ class AssignBillingAddress
                 }
             }
             
+            // The checkout's email for a guest is the latest one typed; the quote's can be
+            // older when its save is still under way.
+            if ($fallbackEmail && !$quote->getCustomerId()) {
+                $customerEmail = $fallbackEmail;
+                if (!$quote->getCustomerEmail()) {
+                    $quote->setCustomerEmail($fallbackEmail);
+                }
+            }
             // Always fallback to the provided fallbackEmail if customerEmail is still null
             if (is_null($customerEmail)) {
                 $customerEmail = $fallbackEmail;
@@ -101,6 +129,8 @@ class AssignBillingAddress
                 'lastName' => $billingAddress->getLastname(),
                 'email' => $customerEmail,
                 'phoneNumber' => $phone,
+                // Without it Briqpay stores the session's country as the billing country.
+                'country' => (string) ($billingAddress->getCountryId() ?? ''),
             ];
 
             // Replace null values with empty strings
@@ -109,8 +139,9 @@ class AssignBillingAddress
                     $billingData[$key] = '';
                 }
 
-                if (empty($value) && $key != "streetAddress2") {
-                    $this->logger->error('Empty value found for billing data field: ' . $key);
+                // Region is only used in some countries, so an empty one is not an error.
+                if (empty($value) && !in_array($key, ["streetAddress2", "region"], true)) {
+                    $this->logger->info('Empty value found for billing data field: ' . $key);
                 }
             }
 

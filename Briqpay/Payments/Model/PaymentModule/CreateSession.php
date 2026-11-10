@@ -1,7 +1,10 @@
 <?php
 namespace Briqpay\Payments\Model\PaymentModule;
 
+use Briqpay\Payments\Model\OrderManagement\SessionLedger;
+
 use Briqpay\Payments\Model\Config\SetupConfig;
+use Briqpay\Payments\Model\Utility\CompanyName;
 use Briqpay\Payments\Model\Utility\GenerateCart;
 use Briqpay\Payments\Model\Utility\AssignBillingAddress;
 use Briqpay\Payments\Model\Utility\AssignShippingAddress;
@@ -94,7 +97,7 @@ class CreateSession
                 continue;
             }
 
-            // Use the "name" field if provided, otherwise fallback to a sanitized version of the label
+            // The "name" field when given, else a generated key.
             $key = !empty($row['name']) ? $row['name'] : 'term_' . bin2hex(random_bytes(2));
 
             $checkboxes[] = [
@@ -106,6 +109,28 @@ class CreateSession
         }
 
         return !empty($checkboxes) ? ['checkboxes' => $checkboxes] : null;
+    }
+
+    /**
+     * The customer's company for a business session, from the quote's addresses.
+     *
+     * Briqpay takes company data only when the session is created. Magento holds a
+     * company name but no organisation number, so `cin` is left for the customer to
+     * enter in the checkout.
+     *
+     * @param array<string, mixed> $body
+     * @param \Magento\Quote\Model\Quote $quote
+     */
+    private function addCompany(array &$body, $quote): void
+    {
+        $names = CompanyName::fromQuote($quote);
+        if ($names['billing'] !== '') {
+            $body['data']['company'] = ['name' => $names['billing']];
+            // Kept on the session as sent, so a later request compares the billing company
+            // with the name sent rather than with the company block Briqpay returns.
+            $body['references'][CompanyName::REFERENCE] = mb_substr($names['billing'], 0, 512);
+        }
+        $body['data'] = CompanyName::onAddresses($body['data'], $names);
     }
 
     public function getPaymentModule($fallbackEmail = null)
@@ -161,7 +186,10 @@ class CreateSession
                 'terms' => $config['terms_url']
             ],
             'references' => [
-                'quoteId' => (string) $quoteId
+                'quoteId' => (string) $quoteId,
+                // Captures and refunds of this session send each Magento document's own
+                // line amounts (see SessionLedger::documentAmounts()).
+                SessionLedger::LINE_AMOUNTS_REFERENCE => SessionLedger::LINE_AMOUNTS_MAGENTO,
             ],
             'data' => [
                 'order' => [
@@ -176,10 +204,8 @@ class CreateSession
             'hooks' => [
                 [
                     'eventType' => 'order_status',
-                    // Every status HandleWebhook::handleOrderStatus() actually maps -
-                    // captured_full/captured_partial were missing here even though the
-                    // handler already coded for captured_full, which is exactly the kind
-                    // of drift that let captured_partial go completely unhandled.
+                    // The statuses the module acts on; HandleWebhook maps a few more for
+                    // webhooks replayed by hand.
                     'statuses' => [
                         'order_pending',
                         'order_rejected',
@@ -205,7 +231,19 @@ class CreateSession
             ]
         ];
 
-        $this->logger->debug('Body before dispatch:', $body);
+        // A virtual quote has no shipping address to prefill.
+        $body['data'] = array_filter($body['data'], static function ($block): bool {
+            return $block !== null;
+        });
+
+        // Only the payment module is ever loaded. A business session carries the company
+        // name from the address; a merchant with the organisation number adds it on the
+        // briqpay_payment_module_body_prepare event.
+        if ($config['customer_type'] === 'business') {
+            $this->addCompany($body, $quote);
+        }
+
+        $this->logger->debug('Body before dispatch:', ['body' => $body]);
 
         $this->eventManager->dispatch('briqpay_payment_module_body_prepare', [
             'body' => &$body,
@@ -213,10 +251,7 @@ class CreateSession
             'quote' => $quote
         ]);
 
-        // Rounding is now settled unconditionally as part of $cartData - strict_rounding
-        // is kept as a no-op config field for one release, then removed.
-
-        $this->logger->debug('Final body before request to ApiClient:', $body);
+        $this->logger->debug('Final body before request to ApiClient:', ['body' => $body]);
 
         try {
             $response = $this->apiClient->request('POST', $uri, $body);

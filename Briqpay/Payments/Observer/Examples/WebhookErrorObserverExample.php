@@ -47,55 +47,19 @@ class WebhookErrorObserverExample implements ObserverInterface
         }
 
         try {
-            $rawResponse = $this->readSession->getSession($sessionId);
-            
-            // Log the structure for a second just to be 100% sure in the logs
-            $this->logger->info('Briqpay Recovery: Raw Session Read', ['keys' => array_keys($rawResponse)]);
+            $session = $this->readSession->getSession($sessionId);
+            $captures = (array) ($session['data']['captures'] ?? []);
+            $order = $session['data']['order'] ?? null;
 
-            // Standardize the data root
-            $sessionData = $rawResponse['sessionData'] ?? $rawResponse;
-            $innerData = $sessionData['data'] ?? [];
-
-            // DEEP SEARCH FOR CAPTURES
-            // Path 1: sessionData -> data -> captures
-            $captures = $innerData['captures'] ?? [];
-
-            // Path 2: sessionData -> data -> transactions -> [0] -> captures
-            if (empty($captures) && isset($innerData['transactions'][0]['captures'])) {
-                $captures = $innerData['transactions'][0]['captures'];
-            }
-
-            // Path 3: Direct from raw (depending on ApiClient parsing)
-            if (empty($captures) && isset($rawResponse['captures'])) {
-                $captures = $rawResponse['captures'];
-            }
-
-            if (!empty($captures)) {
-                $firstCapture = reset($captures);
-                $captureId = $firstCapture['captureId'] ?? null;
-                $orderData = $innerData['order'] ?? ($sessionData['order'] ?? null);
-
-                if ($captureId && $orderData) {
-                    $this->processRefund($sessionId, $captureId, $orderData);
+            // A captured payment is refunded; an uncaptured one is cancelled.
+            if ($captures !== []) {
+                $captureId = reset($captures)['captureId'] ?? null;
+                if ($captureId && $order) {
+                    $this->processRefund($sessionId, $captureId, $order);
                 } else {
-                    $this->logger->error('Capture found but missing data details for refund.', [
-                        'captureId_found' => (bool)$captureId,
-                        'orderData_found' => (bool)$orderData
-                    ]);
+                    $this->logger->error('Capture found but its id or the order is missing; nothing refunded.');
                 }
             } else {
-                // Double check status field as a fail-safe
-                $orderStatus = $sessionData['moduleStatus']['payment']['orderStatus'] ?? '';
-                if ($orderStatus === 'captured_full' || $orderStatus === 'captured_partial') {
-                     $this->logger->warning('No captures array found, but moduleStatus indicates CAPTURED. Attempting to find CaptureId in transactions.');
-                     // One last try to find a captureId in transactions if the array was empty
-                     $captureId = $innerData['transactions'][0]['pspOrderManagementIds']['capture']['apiTransactionId'] ?? null;
-                     if ($captureId) {
-                         $this->processRefund($sessionId, $captureId, $innerData['order']);
-                         return;
-                     }
-                }
-
                 $this->processCancel($sessionId, $quoteId);
             }
 

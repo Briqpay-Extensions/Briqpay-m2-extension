@@ -103,9 +103,15 @@ class Index extends Action implements CsrfAwareActionInterface
             $requestBody = $this->getRequest()->getContent();
             // Decode the JSON content to an array
             $data = json_decode($requestBody, true);
+            if (!is_array($data) || !self::validIds($data)) {
+                $this->logger->warning('Webhook without a JSON body holding sessionId and quoteId ignored.');
+
+                return $resultJson->setHttpResponseCode(400)
+                    ->setData(['status' => false, 'message' => 'The webhook could not be processed.']);
+            }
 
             // Log the received data for debugging
-            $this->logger->debug('Webhook received data: ' . print_r($data, true));
+            $this->logger->debug('Webhook received data', ['data' => $data]);
 
             // Process the webhook data using the service class
             $result = $this->handleWebhook->processOrderStatusWebhook($data);
@@ -120,16 +126,34 @@ class Index extends Action implements CsrfAwareActionInterface
                  ]);
                 // Log the error message
                 $this->logger->error('Webhook processing failed with message: ' . $result['message']);
-                // Return 400 status code with the result payload
-                return $resultJson->setHttpResponseCode(400)->setData($result);
+                // The reason stays in the log; the answer only says it failed.
+                return $resultJson->setHttpResponseCode(400)
+                    ->setData(['status' => false, 'message' => 'The webhook could not be processed.']);
             }
 
-            // If successful, return 200 status code with the result
-            return $resultJson->setData($result);
+            // Success is answered without the handler's details.
+            return $resultJson->setData(['status' => true]);
         } catch (\Exception $e) {
             // Log the critical error and return 400 with the exception message
             $this->logger->critical('Webhook error: ' . $e->getMessage());
-            return $resultJson->setHttpResponseCode(400)->setData(['status' => false, 'message' => $e->getMessage()]);
+            return $resultJson->setHttpResponseCode(400)
+                ->setData(['status' => false, 'message' => 'The webhook could not be processed.']);
         }
+    }
+
+    /**
+     * A session id and a quote id as Briqpay sends them; anything else is answered
+     * without touching the API or the database.
+     *
+     * @param array<string, mixed> $data
+     * @return bool
+     */
+    private static function validIds(array $data): bool
+    {
+        return isset($data['sessionId'], $data['quoteId'])
+            && is_string($data['sessionId'])
+            && preg_match('/^[A-Za-z0-9-]{1,64}$/', $data['sessionId']) === 1
+            && (is_int($data['quoteId']) || (is_string($data['quoteId']) && ctype_digit($data['quoteId'])))
+            && (int) $data['quoteId'] > 0;
     }
 }

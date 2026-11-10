@@ -51,8 +51,7 @@ class Index extends Action
      */
     public function execute()
     {
-        $guestEmailEncoded = $_GET["hash"];
-        $guestEmail = base64_decode($guestEmailEncoded);
+        $guestEmail = $this->guestEmail();
         $result = $this->resultJsonFactory->create();
         
         try {
@@ -62,11 +61,21 @@ class Index extends Action
             }
             
             $sessionId = $postData['sessionId'];
-            $decision = $this->makeDecision->makeDecision($sessionId, $guestEmail);
+            // The approval the page's earlier purchase on the session got, if any.
+            $approval = isset($postData['approval']) && is_string($postData['approval']) ? $postData['approval'] : null;
+            $decision = $this->makeDecision->withApproval($approval)->makeDecision($sessionId, $guestEmail);
+            $answer = ['decision' => $decision];
+            // Also with a failed decision: the session may be marked with it.
+            if ($this->makeDecision->givenApproval() !== null) {
+                $answer['approval'] = $this->makeDecision->givenApproval();
+            }
+            if ($this->makeDecision->refusalForCustomer() !== null) {
+                $answer['message'] = $this->makeDecision->refusalForCustomer();
+            }
 
-            return $result->setData(['decision' => $decision]);
+            return $result->setData($answer);
             
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->error('Exception occurred: ' . $e->getMessage(), [
                 'exception' => $e,
             ]);
@@ -83,5 +92,27 @@ class Index extends Action
     {
         $result = $this->resultJsonFactory->create();
         return $result->setData(['error' => true, 'message' => 'An error occurred.']);
+    }
+
+    /**
+     * The guest's email, from the JSON request body; older custom frontends may send it
+     * as the base64 "hash" query parameter.
+     */
+    private function guestEmail(): ?string
+    {
+        $request = $this->getRequest();
+        $body = $request instanceof \Magento\Framework\App\Request\Http
+            ? json_decode((string) $request->getContent(), true)
+            : null;
+        if (is_array($body) && isset($body['guestEmail']) && is_string($body['guestEmail'])) {
+            return $body['guestEmail'] !== '' ? $body['guestEmail'] : null;
+        }
+        $hash = $this->getRequest()->getParam('hash');
+        if (!is_string($hash) || $hash === '') {
+            return null;
+        }
+        $email = base64_decode($hash, true);
+
+        return $email !== false && $email !== '' ? $email : null;
     }
 }

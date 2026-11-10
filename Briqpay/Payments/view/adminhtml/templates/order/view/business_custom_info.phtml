@@ -1,23 +1,24 @@
 <?php /** @var \Briqpay\Payments\Block\Order\View\BusinessCustomData $block */ ?>
+<?php /** @var \Magento\Framework\Escaper $escaper */ ?>
 <?php if ($block->hasBusinessCustomData()): ?>
     <div class="business-info-container">
         <span class="title">Company Information</span>
 
         <?php if ($block->getCompanyCin()): ?>
             <div>
-                <strong>Company CIN:</strong> <?php echo $block->getCompanyCin(); ?>
+                <strong>Company CIN:</strong> <?= $escaper->escapeHtml((string) $block->getCompanyCin()) ?>
             </div>
         <?php endif; ?>
 
         <?php if ($block->getCompanyName()): ?>
             <div>
-                <strong>Company Name:</strong> <?php echo $block->getCompanyName(); ?>
+                <strong>Company Name:</strong> <?= $escaper->escapeHtml((string) $block->getCompanyName()) ?>
             </div>
         <?php endif; ?>
 
         <?php if ($block->getCompanyVatNo()): ?>
             <div>
-                <strong>Company VAT Number:</strong> <?php echo $block->getCompanyVatNo(); ?>
+                <strong>Company VAT Number:</strong> <?= $escaper->escapeHtml((string) $block->getCompanyVatNo()) ?>
             </div>
         <?php endif; ?>
     </div>

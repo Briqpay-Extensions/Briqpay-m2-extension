@@ -9,7 +9,7 @@ use Briqpay\Payments\Logger\Logger;
 class DecisionObserverExample implements ObserverInterface
 {
     /**
-     * @var LoggerInterface
+     * @var Logger
      */
     protected $logger;
     protected $compareData;
@@ -40,24 +40,15 @@ class DecisionObserverExample implements ObserverInterface
         $validation = $observer->getEvent()->getValidation();
         $quote = $observer->getEvent()->getQuote();
 
-        // Log the received data for debugging
-        $this->logger->info('Observer executed', [
-            'session' => $session,
+        $this->logger->debug('Decision observer called', [
+            'sessionId' => $session['sessionId'] ?? null,
             'validation' => $validation,
-            'quote' => $quote
+            'quoteId' => $quote ? $quote->getId() : null,
         ]);
 
-        //Example to compare cart items
-        //$cartDataChanged = $this->compareData->compareCartData($sessionData['order']['cart'] ?? [], $cart);
-
-        // Perform validation logic here
-        // For now, we set validation to false as a first step
+        // Your own checks go here; false refuses the purchase.
         $validation = true;
 
         $observer->getEvent()->setData('validation', $validation);
-        // Log the updated validation status
-        $this->logger->info('Validation set to false by DecisionObserverExample', [
-            'validation' => $validation
-        ]);
     }
 }

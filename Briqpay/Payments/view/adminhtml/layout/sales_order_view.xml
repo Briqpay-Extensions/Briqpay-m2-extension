@@ -6,6 +6,7 @@
     <body>
         <referenceContainer name="order_additional_info">
             <container name="order_info_containers" htmlTag="div" htmlClass="order-info-containers" after="order_tab_info">
+                <block class="Briqpay\Payments\Block\Adminhtml\Order\PaymentLink" name="order_view_briqpay_payment_link" template="Briqpay_Payments::order/view/payment_link.phtml"/>
                 <block class="Briqpay\Payments\Block\Order\View\Custom" name="order_view_custom" template="Briqpay_Payments::order/view/custom_info.phtml"/>
                 <block class="Briqpay\Payments\Block\Order\View\BusinessCustomData" name="order_view_business_custom" template="Briqpay_Payments::order/view/business_custom_info.phtml"/>
                 <block class="Briqpay\Payments\Block\Order\View\StrongAuthCustomData" name="order_view_strongauth_custom" template="Briqpay_Payments::order/view/strong_auth_custom_info.phtml"/>

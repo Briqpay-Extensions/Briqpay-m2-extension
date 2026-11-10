@@ -58,7 +58,7 @@ class ReadSession
             $this->logger->error('Error fetching session: ' . $e->getMessage(), [
                 'exception' => $e,
             ]);
-            throw new \Exception('Error fetching session');
+            throw new \Exception('Error fetching session', 0, $e);
         }
     }
 }

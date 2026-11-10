@@ -7,6 +7,13 @@ use Magento\Framework\HTTP\Client\Curl;
 class BriqpayCurl extends Curl
 {
     /**
+     * The transfer error of the last PATCH, if it failed before any response.
+     *
+     * @var string
+     */
+    protected $_responseError = '';
+
+    /**
      * Make a PATCH request
      *
      * @param string $uri
@@ -20,6 +27,10 @@ class BriqpayCurl extends Curl
         curl_setopt($this->_ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
         curl_setopt($this->_ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($this->_ch, CURLOPT_POSTFIELDS, $params);
+        // GET and POST go through Magento's client, which applies the timeout; so must PATCH.
+        curl_setopt($this->_ch, CURLOPT_TIMEOUT, $this->_timeout);
+        curl_setopt($this->_ch, CURLOPT_CONNECTTIMEOUT, 10);
+        $this->_responseError = '';
 
         // Set headers
         $headers = [];
@@ -36,7 +47,5 @@ class BriqpayCurl extends Curl
         if ($this->_responseBody === false) {
             $this->_responseError = curl_error($this->_ch);
         }
-
-        curl_close($this->_ch);
     }
 }

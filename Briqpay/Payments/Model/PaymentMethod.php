@@ -9,7 +9,7 @@ use Briqpay\Payments\Model\CustomTableFactory;
 use Briqpay\Payments\Model\OrderManagement\CancelOrder as BriqpayCancelOrder;
 
 /**
- * MD Custom Payment Method Model
+ * The Briqpay payment method.
  */
 class PaymentMethod extends \Magento\Payment\Model\Method\AbstractMethod
 {
@@ -25,9 +25,16 @@ class PaymentMethod extends \Magento\Payment\Model\Method\AbstractMethod
     protected $_canCapturePartial = true;
     protected $_canRefund = true;
     protected $_canRefundInvoicePartial= true;
-    protected $_canVoid = true;
+    // Magento's void would record a void while Briqpay's authorisation stayed open;
+    // cancelling the order (CancelOrder) is what releases it.
+    protected $_canVoid = false;
+    // An order the admin creates is paid later, on Briqpay's hosted payment page: see
+    // initialize() and Model\HostedPage\CreatePaymentLink.
+    protected $_canUseInternal = true;
     protected $_canCancel = true;
     protected $refundOrder;
+
+    private ?\Magento\Framework\App\State $appState;
     protected $logger;
     protected $captureOrder;
     protected $customTableFactory;
@@ -50,7 +57,9 @@ class PaymentMethod extends \Magento\Payment\Model\Method\AbstractMethod
         CustomTableFactory $customTableFactory,
         RefundOrder $refundOrder,
         BriqpayCancelOrder $briqpayCancelOrder,
+        ?\Magento\Framework\App\State $appState = null
     ) {
+        $this->appState = $appState;
         parent::__construct(
             $context,
             $registry,
@@ -68,18 +77,64 @@ class PaymentMethod extends \Magento\Payment\Model\Method\AbstractMethod
         $this->briqpayCancelOrder = $briqpayCancelOrder;
     }
 
-    public function capture(InfoInterface $payment, $amount)
+    /**
+     * The invoiced quantities: from the invoice being captured, which
+     * StoreInvoiceForCapture puts on the payment for every invoice however it is
+     * created (admin, REST, CLI, other modules). The admin form's request parameters
+     * are only a fallback for callers that capture without that event.
+     *
+     * @param InfoInterface $payment
+     * @param \Magento\Sales\Model\Order $order
+     * @return array<int, \Magento\Framework\DataObject>
+     * @throws LocalizedException
+     */
+    private function getCaptureCart(InfoInterface $payment, $order): array
     {
-        // Implement your capture logic here
-        // Example:
-        $this->_logger->info('Capture method called.' . $amount);
-        // Get the order associated with the payment
-        $order = $payment->getOrder();
-        $this->_logger->info('Order ID: ' . $order->getIncrementId());
-        $captureArray = $this->_request->getParams();
+        $captureCart = [];
+        $invoice = $payment instanceof \Magento\Framework\DataObject
+            ? $payment->getData(\Briqpay\Payments\Observer\StoreInvoiceForCapture::PAYMENT_KEY)
+            : null;
+        if ($invoice) {
+            $invoicedQty = [];
+            foreach ($invoice->getAllItems() as $invoiceItem) {
+                $invoicedQty[(int) $invoiceItem->getOrderItemId()] = (float) $invoiceItem->getQty();
+            }
+            foreach ($invoice->getAllItems() as $invoiceItem) {
+                $orderItem = $invoiceItem->getOrderItem();
+                if (!$orderItem || (float) $invoiceItem->getQty() <= 0) {
+                    continue;
+                }
+                // Children are captured through their parent line, except a bundle priced
+                // from its children (dynamic price), which is captured through them.
+                $parent = $orderItem->getParentItem();
+                if ($orderItem->getParentItemId() && !$parent) {
+                    continue;
+                }
+                $throughChildren = $parent
+                    ? $parent instanceof \Magento\Sales\Model\Order\Item && $parent->isChildrenCalculated()
+                    : $orderItem->isChildrenCalculated();
+                if ($parent ? !$throughChildren : $throughChildren) {
+                    continue;
+                }
+                $captureCart[] = new \Magento\Framework\DataObject([
+                    'sku' => $orderItem->getSku(),
+                    'quote_item_id' => $orderItem->getQuoteItemId(),
+                    'qty' => (float) $invoiceItem->getQty(),
+                    'charged_incl_vat' => CaptureOrder::chargedInclVat($invoiceItem),
+                    'document_amounts' => CaptureOrder::documentAmounts($invoiceItem),
+                    'parent_sku' => $parent ? $parent->getSku() : null,
+                    'parent_qty' => $parent ? ($invoicedQty[(int) $parent->getItemId()] ?? null) : null,
+                ]);
+            }
 
-        $captureCart = array();
-        foreach ($captureArray["invoice"]["items"] as $itemId => $quantity) {
+            return $captureCart;
+        }
+
+        $items = $this->_request->getParams()['invoice']['items'] ?? null;
+        if (!is_array($items)) {
+            throw new LocalizedException(__('Briqpay could not determine which items this invoice captures.'));
+        }
+        foreach ($items as $itemId => $quantity) {
             foreach ($order->getAllVisibleItems() as $item) {
                 if ($item->getId() == $itemId) {
                     $item->setQuantity($quantity);
@@ -87,147 +142,167 @@ class PaymentMethod extends \Magento\Payment\Model\Method\AbstractMethod
                 }
             }
         }
-           
-        // Get payment method
-        $paymentMethod = $payment->getMethod();
 
-        // Get last transaction ID
-        $lastTransactionId = $payment->getLastTransId();
+        return $captureCart;
+    }
 
-        // Get additional information
-        $additionalInfo = $payment->getAdditionalInformation();
+    /**
+     * An order created in the admin has no Briqpay session yet: Magento places it as
+     * "pending payment" and the admin creates a payment link on the order (Briqpay's
+     * hosted payment page); the payment webhook moves it on. A storefront order is paid
+     * before it exists and is placed as before.
+     *
+     * @return bool
+     */
+    public function isInitializeNeeded()
+    {
+        return $this->inAdmin();
+    }
 
-        // Get payment amounts
-        $amountOrdered = $payment->getAmountOrdered();
-        $amountPaid = $payment->getAmountPaid();
-    
+    /**
+     * @param string $paymentAction
+     * @param \Magento\Framework\DataObject $stateObject
+     * @return $this
+     */
+    public function initialize($paymentAction, $stateObject)
+    {
+        $stateObject->setState(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT);
+        // Not Magento's "pending_payment" status, which its cron cancels after a few hours.
+        $stateObject->setStatus(\Briqpay\Payments\Setup\Patch\Data\AddAwaitingPaymentStatus::STATUS);
+        $stateObject->setIsNotified(false);
+        $payment = $this->getData('info_instance');
+        if ($payment instanceof \Magento\Payment\Model\InfoInterface) {
+            // Marks the order as placed in the admin: it has nothing at Briqpay until
+            // its payment link is paid.
+            $payment->setAdditionalInformation(\Briqpay\Payments\Model\HostedPage\CreatePaymentLink::ADMIN_ORDER, true);
+        }
+
+        return $this;
+    }
+
+    private function inAdmin(): bool
+    {
+        $this->appState = $this->appState
+            ?? \Magento\Framework\App\ObjectManager::getInstance()->get(\Magento\Framework\App\State::class);
+        try {
+            return $this->appState->getAreaCode() === \Magento\Framework\App\Area::AREA_ADMINHTML;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Briqpay takes whole quantities only: a cart with a product sold by weight or length
+     * (a decimal quantity) is paid with another method.
+     *
+     * @param \Magento\Quote\Api\Data\CartInterface|null $quote
+     * @return bool
+     */
+    public function isAvailable(?\Magento\Quote\Api\Data\CartInterface $quote = null)
+    {
+        if ($quote !== null && self::hasDecimalQuantity($quote)) {
+            return false;
+        }
+
+        return parent::isAvailable($quote);
+    }
+
+    /**
+     * @param \Magento\Quote\Api\Data\CartInterface $quote
+     * @return bool
+     */
+    public static function hasDecimalQuantity($quote): bool
+    {
+        if (!method_exists($quote, 'getAllItems')) {
+            return false;
+        }
+        foreach ((array) $quote->getAllItems() as $item) {
+            $qty = (float) $item->getQty();
+            if (abs($qty - round($qty)) > 0.000001) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function capture(InfoInterface $payment, $amount)
+    {
+        $this->_logger->info('Capture method called.' . $amount);
+        $order = $payment->getOrder();
+        $this->_logger->info('Order ID: ' . $order->getIncrementId());
+        if ($order instanceof \Magento\Sales\Model\Order
+            && \Briqpay\Payments\Model\HostedPage\CreatePaymentLink::placedInAdmin($order)
+            && \Briqpay\Payments\Model\HostedPage\CreatePaymentLink::unpaid($order)
+        ) {
+            // Placed in the admin and waiting for its payment link: nothing at Briqpay to capture.
+            throw new \Magento\Framework\Exception\LocalizedException(__(
+                'This order is waiting for its Briqpay payment link to be paid and cannot be invoiced before then.'
+            ));
+        }
+
+        $captureCart = $this->getCaptureCart($payment, $order);
 
         try {
             $order = $payment->getOrder();
-            
 
-            if ($order->getPayment()->getMethod() == 'briqpay') {
-                $captureId=   $this->captureOrder->capture($order, $captureCart, $amount)["captureId"];
+            if ($order->getPayment()->getMethod() != 'briqpay') {
+                throw new LocalizedException(__('This order is not paid with Briqpay, so Briqpay cannot capture it.'));
             }
-            $payment->setTransactionId($captureId);
-            //$payment->setAdditionalInformation()
+            if ($order->getPayment()->getMethod() == 'briqpay') {
+                // The invoice's own total is in the order's currency, as the capture is;
+                // Magento's $amount is in the base currency.
+                $invoice = $payment instanceof \Magento\Framework\DataObject
+                    ? $payment->getData(\Briqpay\Payments\Observer\StoreInvoiceForCapture::PAYMENT_KEY)
+                    : null;
+                $captureId = $this->captureOrder->capture(
+                    $order,
+                    $captureCart,
+                    $invoice ? $invoice->getGrandTotal() : $amount,
+                    $invoice !== null
+                )['captureId'];
+            }
+            // Nothing captured (an invoice of fully discounted items): the invoice gets an id of
+            // its own, so Magento does not give it the previous capture's id and later credit
+            // memos do not point at that capture.
+            $payment->setTransactionId($captureId ?? uniqid('briqpay-nothing-captured-', true));
             $payment->setMethod('briqpay');
             $payment->save();
             return $this;
         } catch (LocalizedException $e) {
-            $this->_logger->error('LocalizedException in CaptureInvoice observer: ' . $e->getMessage());
+            $this->_logger->error('Capture refused: ' . $e->getMessage());
             throw $e; // Rethrow the exception to prevent invoice creation
         } catch (\Exception $e) {
-            $this->_logger->error('General Exception in CaptureInvoice observer: ' . $e->getMessage());
+            $this->_logger->error('Capture failed: ' . $e->getMessage());
             throw new LocalizedException(__('Error capturing invoice.'));
         }
     }
-    /**
-     * Void the payment
-     *
-     * @param \Magento\Payment\Model\InfoInterface $payment
-     * @return $this
-     * @throws \Magento\Framework\Exception\LocalizedException
-     */
-    public function void(\Magento\Payment\Model\InfoInterface $payment)
-    {
-        // Your custom logic to handle the cancellation
-        $order = $payment->getOrder();
-        
-        // If there's an API call or any other logic to handle when cancelling the order, do it here
-        // Example:
-        // $apiResponse = $this->yourApiCancelOrder($order);
-        // if (!$apiResponse->isSuccess()) {
-        //     throw new \Magento\Framework\Exception\LocalizedException(__('Unable to cancel the order.'));
-        // }
-        try {
-            $this->logger->info('Void call ', ['order_id' => $order->getId()]);
-
-            if ($order->getPayment()->getMethod() == 'briqpay') {
-                $this->_logger->info('Briqpay payment method detected and order is being voided.');
-                $this->briqpayCancelOrder->cancel($order);
-                 // Update the order status and state
-                $order->setState(Order::STATE_CANCELED);
-                $order->setStatus(Order::STATE_CANCELED);
-                $order-save();
-                return $this;
-            }
-        } catch (LocalizedException $e) {
-            $this->_logger->error('Issue with void: ' . $e->getMessage());
-            throw $e;
-        } catch (\Exception $e) {
-            $this->_logger->error('General Exception in Void order : ' . $e->getMessage());
-            throw new LocalizedException(__('Error voiding order.'));
-        }
-    }
-    /**
-     * Cancel the order
-     *
-     * @param \Magento\Payment\Model\InfoInterface $payment
-     * @return $this
-     * @throws \Magento\Framework\Exception\LocalizedException
-     */
-    public function cancel(\Magento\Payment\Model\InfoInterface $payment)
-    {
-        // Your custom logic to handle the cancellation
-        $order = $payment->getOrder();
-        
-        // If there's an API call or any other logic to handle when cancelling the order, do it here
-        // Example:
-        // $apiResponse = $this->yourApiCancelOrder($order);
-        // if (!$apiResponse->isSuccess()) {
-        //     throw new \Magento\Framework\Exception\LocalizedException(__('Unable to cancel the order.'));
-        // }
-        try {
-            $this->_logger->info('CancelCall done', ['order_id' => $order->getId()]);
-
-            if ($order->getPayment()->getMethod() == 'briqpay') {
-                $this->_logger->info('Briqpay payment method detected and order is being canceled.');
-                $this->briqpayCancelOrder->cancel($order);
-                 // Update the order status and state
-                $order->setState(Order::STATE_CANCELED);
-                $order->setStatus(Order::STATE_CANCELED);
-                $order-save();
-                return $this;
-            }
-        } catch (LocalizedException $e) {
-            $this->_logger->error('LocalizedException in CancelOrder observer: ' . $e->getMessage());
-            throw $e;
-        } catch (\Exception $e) {
-            $this->_logger->error('General Exception in CancelOrder observer: ' . $e->getMessage());
-            throw new LocalizedException(__('Error canceling order.'));
-        }
-    }
-
     public function refund(InfoInterface $payment, $amount)
     {
         $this->_logger->info('Refund Invoice called.');
-        $captureArray = $this->_request->getParams();
 
         try {
             $creditMemo = $payment->getCreditmemo();
-            
-           
             $order = $payment->getOrder();
-            
 
-            // Check if the payment method is 'briqpay'
             if ($order->getPayment()->getMethod() == 'briqpay') {
-                // Create a new credit memo
-               
                 $this->refundOrder->refund($creditMemo);
-              
-              //  $this->invoiceRepository->save($invoice);
             }
-           
-          //  $payment->setAdditionalInformation()
+
             $payment->setMethod('briqpay');
             $payment->save();
 
             return $this;
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+            // Already a full sentence for the admin (a refused refund, say).
+            $this->_logger->error('Error during refund: ' . $e->getMessage());
+            throw $e;
         } catch (\Exception $e) {
             $this->_logger->error('Error during refund: ' . $e->getMessage());
-            throw new \Magento\Framework\Exception\LocalizedException(__('Error during refund: %1', $e->getMessage()));
+            throw new \Magento\Framework\Exception\LocalizedException(__(
+                'The credit memo could not be refunded at Briqpay: %1',
+                \Briqpay\Payments\Model\OrderManagement\CaptureOrder::readableError($e)
+            ));
         }
     }
 }

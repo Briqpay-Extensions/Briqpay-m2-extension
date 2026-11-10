@@ -34,41 +34,51 @@ class CustomPaymentMethodName implements ObserverInterface
      */
     public function execute(Observer $observer)
     {
-        // Log that the observer has been triggered
-        $this->logger->info('CustomPaymentMethodName Observer triggered');
-
         $transport = $observer->getEvent()->getTransport();
         $order = $transport->getOrder();
-
-        if ($order) {
-            $this->logger->info('Order ID: ' . $order->getIncrementId());
-
-            $payment = $order->getPayment();
-            $quoteId = $order->getQuoteId();
-            $quote = $this->quoteRepository->get($quoteId);
-            if ($payment) {
-                $paymentMethodCode = $payment->getMethodInstance()->getCode();
-
-                if ($paymentMethodCode == 'briqpay') {
-                    $realPaymentMethod = $quote->getData('briqpay_psp_display_name');
-
-                    if ($realPaymentMethod) {
-                        // Modify the payment method name in the transport variables
-                        $transport->setData('payment_html', $realPaymentMethod);
-                        $transport->setData('payment', $realPaymentMethod);
-                    } else {
-                        $this->logger->warning('Payment Method Display Name is empty');
-                        $transport->setData('payment_html', 'foo');
-                        $transport->setData('payment', 'foo');
-                    }
-                } else {
-                    $this->logger->info('Payment Method Code does not match "briqpay"');
-                }
-            } else {
-                $this->logger->warning('Payment object is not available');
-            }
-        } else {
+        if (!$order) {
             $this->logger->warning('Order object is not available');
+
+            return;
+        }
+        $payment = $order->getPayment();
+        if (!$payment) {
+            $this->logger->warning('Payment object is not available');
+
+            return;
+        }
+        $method = $payment->getMethodInstance();
+        if ($method->getCode() !== 'briqpay') {
+            return;
+        }
+
+        // The payment method the customer chose inside Briqpay (Invoice, Swish, ...):
+        // on the order since 2.0, on the quote for orders placed before, else the
+        // method's own title. The e-mail is sent whatever is missing.
+        $displayName = (string) $order->getData('briqpay_psp_display_name');
+        if ($displayName === '') {
+            $displayName = $this->quoteDisplayName((int) $order->getQuoteId());
+        }
+        if ($displayName === '') {
+            $displayName = (string) $method->getTitle();
+        }
+        if ($displayName === '') {
+            return;
+        }
+        $transport->setData('payment_html', $displayName);
+        $transport->setData('payment', $displayName);
+    }
+
+    private function quoteDisplayName(int $quoteId): string
+    {
+        if ($quoteId === 0) {
+            return '';
+        }
+        try {
+            return (string) $this->quoteRepository->get($quoteId)->getData('briqpay_psp_display_name');
+        } catch (\Exception $e) {
+            // Magento deletes converted quotes after a while.
+            return '';
         }
     }
 }

@@ -35,9 +35,35 @@ class AssignShippingAddress
             $this->logger->debug('No Quote ID found in session.');
             return null;
         }
-
         try {
             $quote = $this->cartRepository->getActive($quoteId);
+        } catch (LocalizedException $e) {
+            $this->logger->error('LocalizedException: ' . $e->getMessage());
+            return null;
+        } catch (\Exception $e) {
+            $this->logger->error('Exception: ' . $e->getMessage());
+            return null;
+        }
+
+        return $this->getShippingDataFor($quote, $fallbackEmail);
+    }
+
+    /**
+     * The shipping prefill of a given quote (the checkout's, or an admin order's).
+     *
+     * @param mixed $quote
+     * @param string|null $fallbackEmail
+     * @return array<string, string>|null
+     */
+    public function getShippingDataFor($quote, $fallbackEmail = null)
+    {
+        try {
+
+            // Nothing is shipped, so Briqpay gets no shipping address and the decision
+            // compares none; Magento keeps an empty one on the quote regardless.
+            if ($quote->getIsVirtual()) {
+                return null;
+            }
 
             $shippingAddress = $quote->getShippingAddress();
             if (!$shippingAddress) {
@@ -74,7 +100,7 @@ class AssignShippingAddress
                 $customerEmail = $quote->getCustomerEmail();
                 $customerId = $quote->getCustomerId();
             
-                if ($customerId || is_null($customerEmail)) {
+                if ($customerId) {
                     try {
                         $customer = $this->customerRepository->getById($customerId);
                         $customerEmail = $customer->getEmail();
@@ -84,10 +110,18 @@ class AssignShippingAddress
                 }
             }
             
+            // The checkout's email for a guest is the latest one typed; the quote's can be
+            // older when its save is still under way.
+            if ($fallbackEmail && !$quote->getCustomerId()) {
+                $customerEmail = $fallbackEmail;
+                if (!$quote->getCustomerEmail()) {
+                    $quote->setCustomerEmail($fallbackEmail);
+                }
+            }
             // Always fallback to the provided fallbackEmail if customerEmail is still null
             if (is_null($customerEmail)) {
                 $customerEmail = $fallbackEmail;
-                $this->logger->debug('Using fallback email for billing: ');
+                $this->logger->debug('Using the fallback email for shipping.');
                 $quote->setCustomerEmail($customerEmail);
             }
 
@@ -101,6 +135,7 @@ class AssignShippingAddress
                 'lastName' => $shippingAddress->getLastname(),
                 'email' => $customerEmail,
                 'phoneNumber' => $phone,
+                'country' => (string) ($shippingAddress->getCountryId() ?? ''),
             ];
 
             // Replace null values with empty strings
@@ -109,8 +144,9 @@ class AssignShippingAddress
                     $shippingData[$key] = '';
                 }
 
-                if (empty($value) && $key != "streetAddress2") {
-                    $this->logger->error('Empty value found for shipping data field: ' . $key);
+                // Region is only used in some countries, so an empty one is not an error.
+                if (empty($value) && !in_array($key, ["streetAddress2", "region"], true)) {
+                    $this->logger->info('Empty value found for shipping data field: ' . $key);
                 }
             }
 
