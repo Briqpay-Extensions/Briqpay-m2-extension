@@ -6,7 +6,9 @@
  * @var \Magento\Framework\View\Element\Template $block
  * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
  */
-$script = <<<'JS'
+// A heredoc, not a nowdoc: Magento's production template minifier keeps only unquoted
+// heredocs intact, and the script holds no $ or backslash for PHP to interpolate.
+$script = <<<JS
 require(['Magento_Customer/js/customer-data'], function (customerData) {
     var attempts = 0;
     var intervalId = setInterval(function () {

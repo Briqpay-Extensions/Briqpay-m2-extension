@@ -5,6 +5,16 @@ starting with 2.0.0. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-11-19
+
+### Fixed
+
+- The order confirmation page shows after a Briqpay purchase on stores in production
+  mode that minify templates (Minify Html under Stores > Configuration > Advanced >
+  Developer). After updating, a store in production mode runs `bin/magento setup:upgrade`,
+  `bin/magento setup:di:compile` and `bin/magento setup:static-content:deploy`; the static
+  content deploy rebuilds Magento's minified copies of the module's templates.
+
 ## [2.0.0] - 2026-11-10
 
 ### Changed

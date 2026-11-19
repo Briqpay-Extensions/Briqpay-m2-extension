@@ -80,7 +80,9 @@ shop's own webhook addresses, per store view.
 
 ### Upgrading from 1.x
 
-Run `composer require briqpay/module-payments:^2.0 && bin/magento setup:upgrade`. PHP 8.2 or
+Run `composer require briqpay/module-payments:^2.0 && bin/magento setup:upgrade`; a store in
+production mode then also runs `bin/magento setup:di:compile` and
+`bin/magento setup:static-content:deploy`, as after every module update. PHP 8.2 or
 later and Magento 2.4.6 or later are required. The upgrade rewrites the sales order table
 once (the Briqpay session id column becomes an indexed varchar), so run it at a quiet
 moment on a large store. The upgrade keeps every order, invoice and
